@@ -71,15 +71,31 @@ class AllowlistMiddleware(Middleware):
         return await call_next(context)
 
 
+def _base_url() -> str | None:
+    """Public URL of this server.
+
+    Railway injects RAILWAY_PUBLIC_DOMAIN, so the OAuth base URL configures
+    itself on that platform and only needs setting by hand elsewhere.
+    """
+    if explicit := os.environ.get("YTM_BASE_URL"):
+        return explicit.rstrip("/")
+    if domain := os.environ.get("RAILWAY_PUBLIC_DOMAIN"):
+        return f"https://{domain}"
+    return None
+
+
 def _build_auth():
     """Construct the OAuth provider named by YTM_AUTH_PROVIDER, or None."""
     provider = os.environ.get("YTM_AUTH_PROVIDER", "none").strip().lower()
     if provider in ("", "none"):
         return None
 
-    base_url = os.environ.get("YTM_BASE_URL")
+    base_url = _base_url()
     if not base_url:
-        raise SystemExit("YTM_BASE_URL must be set (public https URL) when auth is enabled.")
+        raise SystemExit(
+            "Set YTM_BASE_URL to this server's public https URL when auth is enabled "
+            "(on Railway this is derived from RAILWAY_PUBLIC_DOMAIN automatically)."
+        )
 
     if provider == "github":
         from fastmcp.server.auth.providers.github import GitHubProvider
@@ -248,6 +264,20 @@ def youtube_transcript(
     )
 
 
+@mcp.custom_route("/healthz", methods=["GET"])
+async def healthz(request):
+    """Plain HTTP healthcheck for the platform. Deliberately unauthenticated."""
+    from starlette.responses import JSONResponse
+
+    return JSONResponse(
+        {
+            "status": "ok",
+            "auth_provider": os.environ.get("YTM_AUTH_PROVIDER", "none"),
+            "base_url": _base_url(),
+        }
+    )
+
+
 @mcp.tool
 def health() -> dict:
     """Report server configuration and backend availability. No secrets returned."""
@@ -271,11 +301,12 @@ def main() -> None:
         mcp.run()
         return
 
-    mcp.run(
-        transport="http",
-        host=os.environ.get("YTM_HOST", "127.0.0.1"),
-        port=int(os.environ.get("YTM_PORT", "8000")),
-    )
+    # Railway (and most PaaS) assign the port at runtime via PORT.
+    port = int(os.environ.get("PORT") or os.environ.get("YTM_PORT") or "8000")
+    host = os.environ.get("YTM_HOST", "127.0.0.1")
+    log.info("serving MCP on http://%s:%s/mcp (base_url=%s)", host, port, _base_url())
+
+    mcp.run(transport="http", host=host, port=port)
 
 
 if __name__ == "__main__":
