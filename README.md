@@ -90,14 +90,41 @@ server refuses to start if auth is on and the allowlist is empty.
 
 ## Where to run it
 
-**The constraint that drives this:** YouTube blocks datacenter IPs by ASN, not by
-request rate — AWS/GCP/Azure/Vercel ranges are identifiable and routinely
-blocked. `youtube-transcript-api`'s own docs say you will "most likely" hit
-`RequestBlocked` on any cloud deployment. Low personal volume does not
-necessarily help, because the block is on the network, not the frequency.
+**Measured, not theorised:** deployed to Railway, the very first transcript
+request returned `IpBlocked` in 6 seconds. YouTube blocks by ASN, not by request
+rate, so low personal volume does not help — the block is on the network.
+Every backend failed identically, because they all share the one exit IP.
 
-If a cloud deploy gets blocked, the fix is `YTM_PROXY` pointed at a rotating
-residential proxy (a few £/month), or running somewhere with a residential IP.
+**A cloud deploy therefore needs `YTM_PROXY` pointed at a residential proxy.**
+Rotating residential is the reliable kind; YouTube bans static proxies after
+extended use. Budget a few £/month. The alternative is running somewhere that
+already has a residential IP (a machine at home, published via a tunnel).
+
+Not a serverless workload, either. FastMCP's streamable HTTP initialises its
+session manager in the ASGI lifespan and holds MCP sessions in memory between
+requests. Vercel's Python builder also ignores `api/` when a `pyproject.toml` is
+present, and never produced a function at all. Use a persistent container.
+
+## Deploying on Railway
+
+The `Dockerfile` and `railway.json` are ready; Railway builds from the
+Dockerfile and healthchecks `/healthz`.
+
+`RAILWAY_PUBLIC_DOMAIN` is injected by the platform, so **`YTM_BASE_URL`
+configures itself** — OAuth discovery advertises the right domain with no
+manual step. `PORT` is honoured automatically too.
+
+| Variable | When | Value |
+|---|---|---|
+| `YTM_PROXY` | **required in the cloud** | `http://user:pass@host:port` |
+| `YTM_AUTH_PROVIDER` | for remote access | `github` or `google` |
+| `YTM_ALLOWED_USERS` | with auth | GitHub username, or email for Google |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | with GitHub auth | from the OAuth app |
+| `JWT_SIGNING_KEY` | with auth | `openssl rand -hex 32` |
+| `GROQ_API_KEY` | optional | enables the Whisper fallback |
+
+The GitHub OAuth app's callback URL must be exactly
+`https://<your-railway-domain>/auth/callback`.
 
 ## Setup
 
