@@ -1,0 +1,18 @@
+app = "youtube-transcript-mcp"
+primary_region = "lhr"
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Suspend rather than stop: the machine resumes in ~hundreds of ms, so MCP
+  # sessions and OAuth registrations survive idle periods.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
