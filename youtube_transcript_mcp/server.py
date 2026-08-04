@@ -19,6 +19,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 
+from .env import base_url as _base_url
 from .formatting import build_response, timecode
 from .metadata import chapter_bounds, deep_link, fetch_video_info, find_chapter
 from .transcript import TranscriptError, fetch_transcript
@@ -69,19 +70,6 @@ class AllowlistMiddleware(Middleware):
             log.warning("rejected tool call from %s", identity)
             raise ToolError(f"Not authorized: {identity} is not on the allowlist.")
         return await call_next(context)
-
-
-def _base_url() -> str | None:
-    """Public URL of this server.
-
-    Railway injects RAILWAY_PUBLIC_DOMAIN, so the OAuth base URL configures
-    itself on that platform and only needs setting by hand elsewhere.
-    """
-    if explicit := os.environ.get("YTM_BASE_URL"):
-        return explicit.rstrip("/")
-    if domain := os.environ.get("RAILWAY_PUBLIC_DOMAIN"):
-        return f"https://{domain}"
-    return None
 
 
 def _build_auth():
