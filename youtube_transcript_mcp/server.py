@@ -21,7 +21,13 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 
 from .env import base_url as _base_url
 from .formatting import build_response, timecode
-from .metadata import chapter_bounds, deep_link, fetch_video_info, find_chapter
+from .metadata import (
+    QuotaExceeded,
+    chapter_bounds,
+    deep_link,
+    fetch_video_info,
+    find_chapter,
+)
 from .transcript import TranscriptError, fetch_transcript
 from .urls import NotAYouTubeURL, extract_video_id
 
@@ -127,13 +133,24 @@ def _resolve(url: str) -> str:
         raise ToolError(str(exc)) from exc
 
 
-def _safe_info(video_id: str):
-    """Metadata is a quality upgrade, not a dependency — degrade if it fails."""
+def _safe_info(video_id: str) -> tuple[object | None, str | None]:
+    """Metadata is a quality upgrade, not a dependency — degrade if it fails.
+
+    Returns (info, warning). Degrading silently would leave an agent wondering
+    why a chaptered video came back without chapters, so the reason travels
+    with the response.
+    """
     try:
-        return fetch_video_info(video_id)
+        return fetch_video_info(video_id), None
+    except QuotaExceeded as exc:
+        log.warning("metadata quota exhausted for %s: %s", video_id, exc)
+        return None, str(exc)
     except Exception as exc:
         log.warning("metadata lookup failed for %s: %s", video_id, exc)
-        return None
+        return None, (
+            f"Video metadata unavailable ({type(exc).__name__}), so chapters, title and "
+            "duration are missing from this response. The transcript itself is unaffected."
+        )
 
 
 @mcp.tool
@@ -148,9 +165,9 @@ def youtube_video_info(url: str) -> dict:
     than pulling a two-hour transcript to answer one question.
     """
     video_id = _resolve(url)
-    info = _safe_info(video_id)
+    info, warning = _safe_info(video_id)
     if info is None:
-        raise ToolError(f"Could not read video metadata for {video_id}.")
+        raise ToolError(warning or f"Could not read video metadata for {video_id}.")
 
     long_form = bool(info.duration and info.duration >= 3600)
     description = info.description[:DESCRIPTION_LIMIT]
@@ -225,7 +242,7 @@ def youtube_transcript(
 
     max_chars = max(1_000, min(int(max_chars), MAX_CHARS_CEILING))
     video_id = _resolve(url)
-    info = _safe_info(video_id)
+    info, warning = _safe_info(video_id)
 
     if chapter is not None:
         if info is None or not info.chapters:
@@ -241,7 +258,7 @@ def youtube_transcript(
     except TranscriptError as exc:
         raise ToolError(str(exc)) from exc
 
-    return build_response(
+    response = build_response(
         transcript,
         info,
         style=format,
@@ -250,6 +267,17 @@ def youtube_transcript(
         end=end,
         max_chars=max_chars,
     )
+
+    # Say plainly what capped the output, so a short answer is never mistaken
+    # for a complete one.
+    response["limits"] = {
+        "max_chars": max_chars,
+        "truncated_by_max_chars": response["truncated"],
+        "chapters_available": bool(info and info.chapters),
+    }
+    if warning:
+        response["warnings"] = [warning]
+    return response
 
 
 @mcp.custom_route("/healthz", methods=["GET"])
@@ -262,6 +290,8 @@ async def healthz(request):
             "status": "ok",
             "auth_provider": os.environ.get("YTM_AUTH_PROVIDER", "none"),
             "base_url": _base_url(),
+            "youtube_api_key_configured": bool(os.environ.get("YOUTUBE_API_KEY")),
+            "github_client_id_configured": bool(os.environ.get("GITHUB_CLIENT_ID")),
         }
     )
 
@@ -274,8 +304,18 @@ def health() -> dict:
     return {
         "auth_provider": os.environ.get("YTM_AUTH_PROVIDER", "none"),
         "allowlist_size": len(_allowed_identities()),
-        "proxy_configured": bool(os.environ.get("YTM_PROXY")),
-        "whisper_fallback": bool(os.environ.get("GROQ_API_KEY")),
+        "base_url": _base_url(),
+        # Presence only — never the values. Enough to tell "variable never
+        # reached this container" apart from "variable is wrong".
+        "configured": {
+            "YOUTUBE_API_KEY": bool(os.environ.get("YOUTUBE_API_KEY")),
+            "GITHUB_CLIENT_ID": bool(os.environ.get("GITHUB_CLIENT_ID")),
+            "GITHUB_CLIENT_SECRET": bool(os.environ.get("GITHUB_CLIENT_SECRET")),
+            "JWT_SIGNING_KEY": bool(os.environ.get("JWT_SIGNING_KEY")),
+            "YTM_PROXY": bool(os.environ.get("YTM_PROXY")),
+            "GROQ_API_KEY": bool(os.environ.get("GROQ_API_KEY")),
+            "RAILWAY_PUBLIC_DOMAIN": bool(os.environ.get("RAILWAY_PUBLIC_DOMAIN")),
+        },
         "backends_importable": {
             name: importlib.util.find_spec(name) is not None
             for name in ("youtube_transcript_api", "yt_dlp")

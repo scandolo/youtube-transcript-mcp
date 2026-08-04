@@ -44,6 +44,14 @@ class Chapter:
     end: float | None = None
 
 
+class QuotaExceeded(RuntimeError):
+    """An upstream free-tier allowance ran out.
+
+    Kept distinct from ordinary failures so the tool can say "you are out of
+    quota until X" rather than the far less useful "metadata unavailable".
+    """
+
+
 @dataclass
 class VideoInfo:
     video_id: str
@@ -97,6 +105,42 @@ def parse_chapters(description: str) -> list[Chapter]:
     return chapters if len(chapters) > 1 else []
 
 
+def _classify_403(response) -> Exception:
+    """Turn a Data API 403 into an error that says what to actually do.
+
+    The three causes need different responses from the caller — wait, fix the
+    key restriction, or enable the API — so they must not collapse into one
+    opaque "forbidden".
+    """
+    try:
+        error = response.json().get("error", {})
+        reason = (error.get("errors") or [{}])[0].get("reason", "")
+        message = error.get("message", "")
+    except Exception:
+        reason, message = "", response.text[:200]
+
+    if reason in ("quotaExceeded", "dailyLimitExceeded"):
+        return QuotaExceeded(
+            "YouTube Data API daily quota exhausted (free tier: 10,000 units/day, "
+            "~10,000 video lookups). It resets at midnight US Pacific. Titles, "
+            "durations and chapters are unavailable until then; transcripts are "
+            "unaffected and still work."
+        )
+    if reason == "rateLimitExceeded":
+        return QuotaExceeded(
+            "YouTube Data API rate limit hit — too many requests in a short window. "
+            "Retry in a few seconds."
+        )
+    if "REFERRER" in message.upper() or "referer" in message.lower():
+        return RuntimeError(
+            "The YouTube API key is restricted to specific websites, and this "
+            "request's Referer did not match. Either set the key's Application "
+            "restriction to 'None' in Google Cloud, or make sure YTM_BASE_URL "
+            f"matches the allowed referrer. Upstream said: {message}"
+        )
+    return RuntimeError(f"YouTube Data API refused the request ({reason or '403'}): {message}")
+
+
 def _via_data_api(video_id: str) -> VideoInfo | None:
     """Metadata via the official Data API.
 
@@ -121,6 +165,8 @@ def _via_data_api(video_id: str) -> VideoInfo | None:
             params={"part": "snippet,contentDetails", "id": video_id, "key": key},
             headers=headers,
         )
+        if response.status_code == 403:
+            raise _classify_403(response)
         response.raise_for_status()
         payload = response.json()
 
@@ -193,10 +239,16 @@ def fetch_video_info(video_id: str, *, use_cache: bool = True) -> VideoInfo:
 
     info: VideoInfo | None = None
     errors = []
+    quota: QuotaExceeded | None = None
 
     for name, backend in (("data-api", _via_data_api), ("yt-dlp", _via_yt_dlp)):
         try:
             info = backend(video_id)
+        except QuotaExceeded as exc:
+            quota = exc  # keep trying, but remember the reason worth reporting
+            errors.append(f"{name}: {exc}")
+            log.warning("metadata backend %s out of quota: %s", name, exc)
+            continue
         except Exception as exc:
             errors.append(f"{name}: {type(exc).__name__}: {exc}")
             log.warning("metadata backend %s failed for %s: %s", name, video_id, exc)
@@ -205,6 +257,9 @@ def fetch_video_info(video_id: str, *, use_cache: bool = True) -> VideoInfo:
             break
 
     if info is None:
+        # A quota wall is actionable in a way a generic failure is not, so it wins.
+        if quota is not None:
+            raise quota
         raise RuntimeError(
             f"No metadata backend could describe {video_id}. " + "; ".join(errors or ["no backends"])
         )
