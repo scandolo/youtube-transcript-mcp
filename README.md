@@ -95,10 +95,20 @@ request returned `IpBlocked` in 6 seconds. YouTube blocks by ASN, not by request
 rate, so low personal volume does not help — the block is on the network.
 Every backend failed identically, because they all share the one exit IP.
 
-**A cloud deploy therefore needs `YTM_PROXY` pointed at a residential proxy.**
-Rotating residential is the reliable kind; YouTube bans static proxies after
-extended use. Budget a few £/month. The alternative is running somewhere that
-already has a residential IP (a machine at home, published via a tunnel).
+**A cloud deploy therefore needs a residential proxy.** Set
+`WEBSHARE_PROXY_USERNAME` / `WEBSHARE_PROXY_PASSWORD` from a Webshare
+**"Residential"** package — not "Proxy Server" (that is the free datacenter
+tier, blocked exactly like the host is) and not "Static Residential".
+
+*Rotating* is the operative word, and it is a configuration detail with teeth:
+Webshare hands out per-session usernames like `user-1`, each pinned to one
+residential IP, and one flagged IP then fails every request. The rotating form
+is `user-rotate`, which draws a fresh IP per request. This server appends that
+suffix for you and retries a blocked request onto a new IP, so supply the plain
+username. Measured: `user-1` was blocked outright; `user-rotate` was not.
+
+Budget a few £/month. The alternative is running somewhere that already has a
+residential IP (a machine at home, published via a tunnel).
 
 Not a serverless workload, either. FastMCP's streamable HTTP initialises its
 session manager in the ASGI lifespan and holds MCP sessions in memory between
@@ -116,7 +126,8 @@ manual step. `PORT` is honoured automatically too.
 
 | Variable | When | Value |
 |---|---|---|
-| `YTM_PROXY` | **required in the cloud** | `http://user:pass@host:port` |
+| `WEBSHARE_PROXY_USERNAME` / `WEBSHARE_PROXY_PASSWORD` | **required in the cloud** | from Webshare's proxy settings, plain username |
+| `YTM_PROXY` | instead of the pair above | `http://user:pass@host:port` |
 | `YTM_AUTH_PROVIDER` | for remote access | `github` or `google` |
 | `YTM_ALLOWED_USERS` | with auth | GitHub username, or email for Google |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | with GitHub auth | from the OAuth app |
@@ -125,6 +136,18 @@ manual step. `PORT` is honoured automatically too.
 
 The GitHub OAuth app's callback URL must be exactly
 `https://<your-railway-domain>/auth/callback`.
+
+### Mount a volume, or you will reauthorize on every deploy
+
+FastMCP stores registered OAuth clients on disk. Railway rebuilds the container
+filesystem on every deploy — and again whenever the app wakes from sleep — so
+without a volume those registrations vanish, the connector's `client_id` stops
+being recognised, and the client is told to authorize again after every ship.
+
+Attach a volume to the service (any mount path, e.g. `/data`). Railway then
+injects `RAILWAY_VOLUME_MOUNT_PATH` and the server stores OAuth state there
+automatically. `health` reports `oauth_state_persisted`; if that is `false`,
+sessions will not survive the next deploy.
 
 ## Setup
 
@@ -162,7 +185,9 @@ OAuth discovery and give you no field for one — so mobile needs real OAuth.
    ```
 3. claude.ai → Settings → Connectors → Add custom connector.
 
-`JWT_SIGNING_KEY` keeps sessions valid across restarts.
+`JWT_SIGNING_KEY` signs issued sessions. Setting it keeps them independent of
+the OAuth client secret, so rotating that secret doesn't sign everyone out. It
+is not what carries sessions across a deploy — a mounted volume is.
 
 ## Maintenance
 

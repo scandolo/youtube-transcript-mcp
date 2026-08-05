@@ -78,6 +78,34 @@ class AllowlistMiddleware(Middleware):
         return await call_next(context)
 
 
+def _persist_oauth_state() -> None:
+    """Anchor FastMCP's storage to disk that survives a deploy.
+
+    FastMCP keeps registered OAuth clients under its home directory. On Railway
+    the container filesystem is rebuilt on every deploy — and again whenever the
+    app wakes from sleep — so that directory disappears, the connector's
+    client_id stops being recognised, and the user is told to reauthorize after
+    every ship. Pointing home at the mounted volume is what makes a session
+    outlive a deploy; without a volume there is nowhere durable to put it, so
+    say that plainly rather than failing mysteriously later.
+    """
+    if os.environ.get("FASTMCP_HOME"):
+        return
+
+    volume = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")
+    if volume:
+        home = os.path.join(volume, "fastmcp")
+        os.makedirs(home, exist_ok=True)
+        os.environ["FASTMCP_HOME"] = home
+        log.info("OAuth state persisted to %s", home)
+    elif os.environ.get("RAILWAY_SERVICE_ID"):
+        log.warning(
+            "No volume mounted: OAuth registrations live on an ephemeral disk and will be "
+            "lost on the next deploy or sleep, forcing reauthorization. Mount a Railway "
+            "volume (or set FASTMCP_HOME to durable storage) to stop that."
+        )
+
+
 def _build_auth():
     """Construct the OAuth provider named by YTM_AUTH_PROVIDER, or None."""
     provider = os.environ.get("YTM_AUTH_PROVIDER", "none").strip().lower()
@@ -91,6 +119,13 @@ def _build_auth():
             "(on Railway this is derived from RAILWAY_PUBLIC_DOMAIN automatically)."
         )
 
+    _persist_oauth_state()
+
+    # Left unset, FastMCP derives the token key from the upstream client secret,
+    # which ties every issued session to that secret: rotating it silently signs
+    # everyone out. An explicit key decouples the two.
+    signing_key = os.environ.get("JWT_SIGNING_KEY") or None
+
     if provider == "github":
         from fastmcp.server.auth.providers.github import GitHubProvider
 
@@ -98,6 +133,7 @@ def _build_auth():
             client_id=os.environ["GITHUB_CLIENT_ID"],
             client_secret=os.environ["GITHUB_CLIENT_SECRET"],
             base_url=base_url,
+            jwt_signing_key=signing_key,
         )
 
     if provider == "google":
@@ -107,6 +143,7 @@ def _build_auth():
             client_id=os.environ["GOOGLE_CLIENT_ID"],
             client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
             base_url=base_url,
+            jwt_signing_key=signing_key,
         )
 
     raise SystemExit(f"Unknown YTM_AUTH_PROVIDER: {provider!r} (use github, google or none)")
@@ -313,6 +350,8 @@ def health() -> dict:
             "GITHUB_CLIENT_SECRET": bool(os.environ.get("GITHUB_CLIENT_SECRET")),
             "JWT_SIGNING_KEY": bool(os.environ.get("JWT_SIGNING_KEY")),
             "YTM_PROXY": bool(os.environ.get("YTM_PROXY")),
+            "WEBSHARE_PROXY_USERNAME": bool(os.environ.get("WEBSHARE_PROXY_USERNAME")),
+            "WEBSHARE_PROXY_PASSWORD": bool(os.environ.get("WEBSHARE_PROXY_PASSWORD")),
             "GROQ_API_KEY": bool(os.environ.get("GROQ_API_KEY")),
             "RAILWAY_PUBLIC_DOMAIN": bool(os.environ.get("RAILWAY_PUBLIC_DOMAIN")),
         },
@@ -320,6 +359,9 @@ def health() -> dict:
             name: importlib.util.find_spec(name) is not None
             for name in ("youtube_transcript_api", "yt_dlp")
         },
+        # False means OAuth registrations sit on an ephemeral disk, so the next
+        # deploy or sleep will force the connector to reauthorize.
+        "oauth_state_persisted": bool(os.environ.get("FASTMCP_HOME")),
     }
 
 
@@ -331,7 +373,10 @@ def main() -> None:
 
     # Railway (and most PaaS) assign the port at runtime via PORT.
     port = int(os.environ.get("PORT") or os.environ.get("YTM_PORT") or "8000")
-    host = os.environ.get("YTM_HOST", "127.0.0.1")
+    # Loopback is right locally and wrong on a platform that routes traffic into
+    # the container — there it answers nothing and fails the healthcheck. An
+    # injected PORT is the signal that we are behind such a router.
+    host = os.environ.get("YTM_HOST") or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
     log.info("serving MCP on http://%s:%s/mcp (base_url=%s)", host, port, _base_url())
 
     mcp.run(transport="http", host=host, port=port)

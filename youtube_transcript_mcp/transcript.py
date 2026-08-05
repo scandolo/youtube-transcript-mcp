@@ -21,6 +21,8 @@ from pathlib import Path
 
 import httpx
 
+from .env import proxy as _proxy
+from .env import webshare_credentials
 from .urls import canonical_url
 
 log = logging.getLogger(__name__)
@@ -59,10 +61,6 @@ class Transcript:
         return " ".join(s.text for s in self.segments)
 
 
-def _proxy() -> str | None:
-    return os.environ.get("YTM_PROXY") or None
-
-
 def _lang_matches(key: str, wanted: list[str]) -> bool:
     """`en` should match `en`, `en-US`, `en-orig` and yt-dlp's `a.en`."""
     normalized = key.lower().removeprefix("a.")
@@ -78,10 +76,19 @@ def _via_transcript_api(video_id: str, languages: list[str]) -> Transcript | Non
     from youtube_transcript_api import YouTubeTranscriptApi
 
     proxy_config = None
-    if proxy := _proxy():
+    credentials = webshare_credentials()
+    if credentials and not os.environ.get("YTM_PROXY"):
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+
+        # Worth preferring over a plain proxy URL: this retries a blocked
+        # request ten times, and every retry rotates to a different residential
+        # IP. One unlucky IP stops being fatal.
+        username, password = credentials
+        proxy_config = WebshareProxyConfig(proxy_username=username, proxy_password=password)
+    elif url := _proxy():
         from youtube_transcript_api.proxies import GenericProxyConfig
 
-        proxy_config = GenericProxyConfig(http_url=proxy, https_url=proxy)
+        proxy_config = GenericProxyConfig(http_url=url, https_url=url)
 
     api = YouTubeTranscriptApi(proxy_config=proxy_config)
     fetched = api.fetch(video_id, languages=languages)
