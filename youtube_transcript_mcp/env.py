@@ -30,5 +30,25 @@ def api_referer() -> str | None:
     return f"{root}/" if root else None
 
 
+def webshare_credentials() -> tuple[str, str] | None:
+    """Webshare "Proxy Username"/"Proxy Password", if both are configured."""
+    username = os.environ.get("WEBSHARE_PROXY_USERNAME")
+    password = os.environ.get("WEBSHARE_PROXY_PASSWORD")
+    return (username, password) if username and password else None
+
+
 def proxy() -> str | None:
-    return os.environ.get("YTM_PROXY") or None
+    """Proxy URL for outbound YouTube requests.
+
+    The `-rotate` suffix is the whole point of the Webshare branch: without it
+    Webshare pins the session to one residential IP, which YouTube blocks about
+    as readily as a datacenter one. With it, every request draws a fresh IP from
+    the pool. An explicit YTM_PROXY still wins, for non-Webshare providers.
+    """
+    if explicit := os.environ.get("YTM_PROXY"):
+        return explicit
+    if credentials := webshare_credentials():
+        username, password = credentials
+        username = username.removesuffix("-rotate")
+        return f"http://{username}-rotate:{password}@p.webshare.io:80/"
+    return None

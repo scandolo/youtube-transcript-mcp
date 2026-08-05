@@ -193,8 +193,8 @@ def _via_yt_dlp(video_id: str) -> VideoInfo:
     import yt_dlp
 
     opts = {"skip_download": True, "quiet": True, "no_warnings": True}
-    if proxy := os.environ.get("YTM_PROXY"):
-        opts["proxy"] = proxy
+    if url := proxy():
+        opts["proxy"] = url
 
     with yt_dlp.YoutubeDL(opts) as ydl:
         raw = ydl.extract_info(canonical_url(video_id), download=False)
