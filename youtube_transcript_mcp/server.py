@@ -1,8 +1,9 @@
 """The MCP server.
 
-Two tools, deliberately shaped around how an agent actually works through a
-video: orient first (`youtube_video_info` — cheap, chapters and description),
-then drill in (`youtube_transcript` — a chapter, a keyword search, or the lot).
+Three tools, deliberately shaped around how an agent actually works through a
+video: find it (`search_youtube` — YouTube's own ranking, not the web's), orient
+first (`youtube_video_info` — cheap, chapters and description), then drill in
+(`youtube_transcript` — a chapter, a keyword search, or the lot).
 
 Identity is checked in middleware rather than inside each tool, so a tool added
 later cannot accidentally ship unprotected. The check fails closed: if auth is
@@ -188,6 +189,84 @@ def _safe_info(video_id: str) -> tuple[object | None, str | None]:
             f"Video metadata unavailable ({type(exc).__name__}), so chapters, title and "
             "duration are missing from this response. The transcript itself is unaffected."
         )
+
+
+@mcp.tool
+def search_youtube(
+    query: str,
+    limit: int = 10,
+    order: str = "relevance",
+    duration: str = "any",
+    published_after: str | None = None,
+    channel_id: str | None = None,
+) -> dict:
+    """Search YouTube itself, ranked the way YouTube ranks it.
+
+    This queries YouTube's own index, which is not the same as asking a web
+    search engine for videos: the web index favours pages that are linked and
+    written about, so it returns the famous ones, while YouTube ranks on watch
+    behaviour, freshness and channel authority within its own catalogue. For
+    "what would I find if I searched on YouTube", this is that.
+
+    Every result carries a `url`, so pass one straight to `youtube_video_info`
+    or `youtube_transcript` rather than rebuilding it.
+
+    Args:
+        query: What to search for.
+        limit: How many results, 1-50. Default 10.
+        order: relevance (default), date, viewCount, rating or title.
+        duration: any (default), short (<4min), medium (4-20min), long (>20min).
+        published_after: Only videos published on or after this YYYY-MM-DD date.
+        channel_id: Restrict to one channel (a UC... id, not a handle).
+    """
+    from .search import search_videos
+
+    try:
+        results, source, warnings = search_videos(
+            query,
+            limit=limit,
+            order=order,
+            duration=duration,
+            published_after=published_after,
+            channel_id=channel_id,
+        )
+    except ValueError as exc:
+        raise ToolError(str(exc)) from exc
+    except QuotaExceeded as exc:
+        raise ToolError(str(exc)) from exc
+    except Exception as exc:
+        raise ToolError(f"YouTube search failed: {exc}") from exc
+
+    response = {
+        "query": query,
+        "result_count": len(results),
+        "source": source,
+        "results": [
+            {
+                "position": i,
+                "video_id": r.video_id,
+                "title": r.title,
+                "channel": r.channel,
+                "url": r.url,
+                "published": r.published,
+                "duration_seconds": r.duration,
+                "duration_hms": timecode(r.duration, True) if r.duration else None,
+                "view_count": r.view_count,
+                "description": r.description[:300],
+            }
+            for i, r in enumerate(results, 1)
+        ],
+        # A short list can mean "that is all YouTube had" or "you asked for
+        # fewer"; saying which stops the caller guessing.
+        "limits": {
+            "requested": limit,
+            "returned": len(results),
+            "max_supported": 50,
+        },
+    }
+    if warnings:
+        response["warnings"] = warnings
+    return response
 
 
 @mcp.tool
