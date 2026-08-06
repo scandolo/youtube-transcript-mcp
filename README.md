@@ -36,6 +36,26 @@ Concretely:
 
 ## Tools
 
+### `search_youtube(query, ...)`
+YouTube's own search, not a web search that happens to return videos. The
+distinction is the point: a web index ranks on links and coverage, so it hands
+back the famous videos, while YouTube ranks within its own catalogue on watch
+behaviour, freshness and channel authority. This is what you would have found by
+typing into the search box.
+
+| Arg | Purpose |
+|---|---|
+| `limit` | 1–50, default 10 |
+| `order` | `relevance` (default), `date`, `viewCount`, `rating`, `title` |
+| `duration` | `any` (default), `short` <4min, `medium` 4–20min, `long` >20min |
+| `published_after` | `YYYY-MM-DD` |
+| `channel_id` | Restrict to one channel (a `UC…` id, not a handle) |
+
+Every result carries a `url`, so hand one straight to the tools below. Served by
+the Data API, which costs **100 quota units per search** against the 10,000/day
+free allowance — roughly **100 searches a day**. Past that it falls back to
+yt-dlp, which has no quota but ignores the filters and says so in `warnings`.
+
 ### `youtube_video_info(url)`
 Cheap orientation, no transcript. Title, channel, duration, chapter list with
 deep links, description, available caption languages. Call this first for a long
