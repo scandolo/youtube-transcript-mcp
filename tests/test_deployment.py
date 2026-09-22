@@ -4,6 +4,10 @@ import os
 import subprocess
 import sys
 
+from starlette.testclient import TestClient
+
+from youtube_transcript_mcp.server import _missing_railway_settings, _setup_app
+
 
 def _clean_env() -> dict[str, str]:
     prefixes = ("YTM_", "RAILWAY_", "GITHUB_CLIENT_", "GOOGLE_CLIENT_", "FASTMCP_")
@@ -22,16 +26,24 @@ def _start(extra: dict[str, str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_railway_requires_proxy():
-    result = _start({"RAILWAY_SERVICE_ID": "test"})
-    assert result.returncode != 0
-    assert "residential proxy" in result.stderr
+def test_railway_setup_status(monkeypatch):
+    for key in ("YTM_PROXY", "WEBSHARE_PROXY_USERNAME", "WEBSHARE_PROXY_PASSWORD"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("RAILWAY_SERVICE_ID", "test")
+    missing = _missing_railway_settings()
+    assert any("residential proxy" in item for item in missing)
+
+    with TestClient(_setup_app(missing)) as client:
+        assert client.get("/healthz").json() == {"status": "setup_required", "missing": missing}
+        assert client.get("/mcp").status_code == 503
+        assert client.post("/mcp").status_code == 503
+        assert client.get("/tools").status_code == 404
 
 
 def test_railway_requires_oauth():
     result = _start({"RAILWAY_SERVICE_ID": "test", "YTM_PROXY": "http://proxy.example:80"})
-    assert result.returncode != 0
-    assert "requires OAuth" in result.stderr
+    assert result.returncode == 0
+    assert "Railway setup incomplete" in result.stderr
 
 
 def test_railway_requires_oauth_credentials():
@@ -43,8 +55,9 @@ def test_railway_requires_oauth_credentials():
             "YTM_AUTH_PROVIDER": "github",
         }
     )
-    assert result.returncode != 0
-    assert "GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET" in result.stderr
+    assert result.returncode == 0
+    assert "GITHUB_CLIENT_ID" in result.stderr
+    assert "GITHUB_CLIENT_SECRET" in result.stderr
 
 
 def test_railway_volume_is_used_by_fastmcp(tmp_path):

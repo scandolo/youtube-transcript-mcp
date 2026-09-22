@@ -46,20 +46,31 @@ def _allowed_identities() -> set[str]:
     return {u.strip().lower() for u in raw.split(",") if u.strip()}
 
 
-def _validate_deployment() -> None:
-    """Fail early when a Railway deploy cannot fetch captions."""
+def _missing_railway_settings() -> list[str]:
+    """List setup steps still needed before a public MCP endpoint can start."""
     if not os.environ.get("RAILWAY_SERVICE_ID"):
-        return
-    if os.environ.get("YTM_PROXY"):
-        return
-    if not (
+        return []
+
+    missing = []
+    if not os.environ.get("YTM_PROXY") and not (
         os.environ.get("WEBSHARE_PROXY_USERNAME")
         and os.environ.get("WEBSHARE_PROXY_PASSWORD")
     ):
-        raise SystemExit(
-            "Railway needs a residential proxy for YouTube captions. Set both "
-            "WEBSHARE_PROXY_USERNAME and WEBSHARE_PROXY_PASSWORD, or set YTM_PROXY."
-        )
+        missing.append("residential proxy (Webshare username and password, or YTM_PROXY)")
+
+    provider = os.environ.get("YTM_AUTH_PROVIDER", "none").strip().lower()
+    if provider not in ("github", "google"):
+        missing.append("YTM_AUTH_PROVIDER=github or google")
+    if not _base_url():
+        missing.append("Railway public domain")
+    if not _allowed_identities():
+        missing.append("YTM_ALLOWED_USERS")
+    if provider in ("github", "google"):
+        prefix = provider.upper()
+        for name in (f"{prefix}_CLIENT_ID", f"{prefix}_CLIENT_SECRET"):
+            if not os.environ.get(name):
+                missing.append(name)
+    return missing
 
 
 class AllowlistMiddleware(Middleware):
@@ -184,12 +195,19 @@ def _build_auth():
     raise SystemExit(f"Unknown YTM_AUTH_PROVIDER: {provider!r} (use github, google or none)")
 
 
-_validate_deployment()
-_auth = _build_auth()
+_setup_missing = _missing_railway_settings()
+_auth = _build_auth() if not _setup_missing else None
 
 mcp = FastMCP(name="youtube-transcript", auth=_auth)
 
-if _auth is not None:
+if _setup_missing:
+    class SetupModeMiddleware(Middleware):
+        async def on_call_tool(self, context: MiddlewareContext, call_next):
+            raise ToolError("Railway setup is incomplete; check /healthz for missing settings.")
+
+    mcp.add_middleware(SetupModeMiddleware())
+    log.warning("Railway setup incomplete: %s", ", ".join(_setup_missing))
+elif _auth is not None:
     _allowed = _allowed_identities()
     if not _allowed:
         raise SystemExit("Auth is enabled but YTM_ALLOWED_USERS is empty — refusing to start open.")
@@ -479,6 +497,24 @@ def health() -> dict:
     }
 
 
+def _setup_app(missing: list[str]):
+    """HTTP-only bootstrap app: healthy for Railway, with no MCP tools exposed."""
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def setup_status(request):
+        return JSONResponse({"status": "setup_required", "missing": missing})
+
+    async def setup_mcp(request):
+        return JSONResponse({"error": "setup_required", "missing": missing}, status_code=503)
+
+    return Starlette(routes=[
+        Route("/healthz", setup_status),
+        Route("/mcp", setup_mcp, methods=["GET", "POST"]),
+    ])
+
+
 def main() -> None:
     transport = os.environ.get("YTM_TRANSPORT", "stdio").strip().lower()
     if transport == "stdio":
@@ -491,6 +527,14 @@ def main() -> None:
     # the container — there it answers nothing and fails the healthcheck. An
     # injected PORT is the signal that we are behind such a router.
     host = os.environ.get("YTM_HOST") or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1")
+    if _setup_missing:
+        # A fresh Railway clone needs its generated domain before the deployer
+        # can create the GitHub OAuth app. Serve only setup status until then.
+        import uvicorn
+
+        log.warning("serving setup status on http://%s:%s/healthz", host, port)
+        uvicorn.run(_setup_app(_setup_missing), host=host, port=port)
+        return
     log.info("serving MCP on http://%s:%s/mcp (base_url=%s)", host, port, _base_url())
 
     mcp.run(transport="http", host=host, port=port)

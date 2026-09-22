@@ -24,7 +24,7 @@ You need a [Railway account](https://railway.com/), a [GitHub account](https://g
    | `WEBSHARE_PROXY_PASSWORD` | Residential proxy password |
    | `JWT_SIGNING_KEY` | A random secret, for example the output of `openssl rand -hex 32` |
 
-   The server reads Railway’s `RAILWAY_PUBLIC_DOMAIN` and `PORT` automatically. No `YTM_BASE_URL` or port setting is needed. Railway may show a failed initial deployment before these variables are set; redeploy after saving them.
+   The server reads Railway’s `RAILWAY_PUBLIC_DOMAIN` and `PORT` automatically. No `YTM_BASE_URL` or port setting is needed. Before setup is complete, `https://YOUR-DOMAIN/healthz` lists what is still missing and `/mcp` stays unavailable. Railway redeploys when you save the variables.
 
 4. **Connect your AI app.** The MCP URL is `https://YOUR-DOMAIN/mcp`. Sign in with the allowlisted GitHub account when prompted.
 
@@ -59,7 +59,7 @@ Captions come from `youtube-transcript-api` first, then `yt-dlp`. If both find n
 
 ## Troubleshooting
 
-- **Railway deploy fails:** Check required variables, domain, and volume. The server refuses to start on Railway without OAuth or a proxy. Visit `https://YOUR-DOMAIN/healthz` after it is live.
+- **MCP URL says `setup_required`:** Visit `https://YOUR-DOMAIN/healthz` and fill the listed Railway variables. Generate a public domain if it is missing. The MCP tools stay unavailable until setup is complete.
 - **OAuth callback error:** The GitHub OAuth callback must exactly match `https://YOUR-DOMAIN/auth/callback`. `YTM_ALLOWED_USERS` contains GitHub *usernames*, not email addresses.
 - **Reauthorize after every deploy:** Attach a Railway volume at `/data`. The `health` tool should report `oauth_state_persisted: true`.
 - **`IpBlocked` or no transcript:** Confirm your Webshare package says **Residential**, and use the plain proxy username. The free “Proxy Server” and static residential products do not provide the required rotation. Some videos have disabled or unavailable captions.
