@@ -15,7 +15,7 @@
 Turn raw captions into readable paragraphs with chapters, timestamps, and links to the exact moment in the video. Search YouTube, inspect a video, then pull only the chapter or passages you need. Works as a remote MCP connector for Claude and supported ChatGPT plans, or as a local stdio server.
 
 > [!IMPORTANT]
-> Railway hosting and a **rotating residential proxy** can cost money. YouTube frequently blocks caption requests from cloud IPs. The Railway deployment stays in safe setup mode until its proxy and OAuth settings are complete.
+> Railway hosting and a **rotating residential proxy** can cost money. The local setup needs neither. The Railway deployment stays in safe setup mode until its proxy and sign-in settings are complete.
 
 ## Contents
 
@@ -30,7 +30,9 @@ Turn raw captions into readable paragraphs with chapters, timestamps, and links 
 
 ## Get started
 
-You need a [Railway account](https://railway.com/), a [GitHub account](https://github.com/), and a [Webshare Residential](https://dashboard.webshare.io/) rotating proxy. The proxy's plain username and password are in Webshare's **Residential** settings. A free or static proxy product may not work for captions.
+**On your laptop:** [Run locally](#run-locally) with Claude Code or another local MCP client. Start without a proxy or GitHub OAuth app. Your own connection may still be blocked by YouTube, but it usually avoids the cloud-IP problem.
+
+**In Claude or ChatGPT as a remote connector:** use the Railway steps below. Railway's server sends requests from a cloud IP, which [YouTube often blocks for captions](https://github.com/jdepoix/youtube-transcript-api#working-around-ip-bans-requestblocked-or-ipblocked-exception). A **residential proxy** sends those requests through ordinary home internet IPs instead. GitHub sign-in protects your public MCP URL and your proxy bandwidth; it is unrelated to reading YouTube. This Railway template currently requires both for a working remote deployment. A proxy improves reliability but cannot guarantee every video will work.
 
 ### 1. Deploy
 
@@ -38,7 +40,17 @@ Click **Deploy on Railway** above, choose your Railway workspace, and click **De
 
 The first deployment is intentionally in setup mode: `/healthz` tells you which settings remain, and `/mcp` does not serve tools until setup is complete.
 
-### 2. Create a GitHub OAuth app
+### 2. Get a residential proxy
+
+1. Create a [Webshare account](https://dashboard.webshare.io/) and choose a **Rotating Residential** plan in **Plans & Pricing**. This is a paid plan; Webshare's free **Proxy Server** and **Static Residential** products are different. See [Webshare's plan comparison](https://www.webshare.io/pricing).
+2. Open [Webshare Proxy Settings](https://dashboard.webshare.io/proxy/settings). Copy **Proxy Username** and **Proxy Password**. You do not need to configure an endpoint or choose a country; the server uses Webshare's rotating residential endpoint automatically. A username ending in `-rotate` is fine.
+3. Keep those credentials for step 4. Enter them only in Railway Variables, never in an AI chat or GitHub file.
+
+If you already use another rotating residential provider, set its full proxy URL in `YTM_PROXY` instead of the two Webshare variables. See [.env.example](.env.example).
+
+### 3. Create a GitHub OAuth app
+
+**Why?** Railway gives your server a public URL. The GitHub sign-in checks your username against `YTM_ALLOWED_USERS` so strangers cannot call your tools or spend your proxy bandwidth. This project only asks GitHub for **read access to your profile** to identify your username; it does not request repository access. Local stdio runs on your computer and skips this step. [GitHub's OAuth app guide](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) explains the registration screen.
 
 Open [GitHub Developer settings → OAuth Apps](https://github.com/settings/developers) and choose **New OAuth App**. Use any name. Set **Homepage URL** to your Railway URL and **Authorization callback URL** to:
 
@@ -48,7 +60,7 @@ https://YOUR-DOMAIN/auth/callback
 
 Replace `YOUR-DOMAIN` with your actual Railway hostname, without `https://` inside that placeholder. Copy the **Client ID** and generate a **Client secret**.
 
-### 3. Add five Railway variables
+### 4. Add five Railway variables
 
 In your Railway service, open **Variables** and add these values. Railway redeploys after you save them.
 
@@ -57,12 +69,12 @@ In your Railway service, open **Variables** and add these values. Railway redepl
 | `YTM_ALLOWED_USERS` | Your GitHub username, for example `scandolo`. Separate multiple usernames with commas. |
 | `GITHUB_CLIENT_ID` | The OAuth app's client ID. |
 | `GITHUB_CLIENT_SECRET` | The OAuth app's client secret. |
-| `WEBSHARE_PROXY_USERNAME` | Your plain **Residential** proxy username, without `-rotate`. |
-| `WEBSHARE_PROXY_PASSWORD` | Your Residential proxy password. |
+| `WEBSHARE_PROXY_USERNAME` | **Proxy Username** from Webshare Proxy Settings; a trailing `-rotate` is okay. |
+| `WEBSHARE_PROXY_PASSWORD` | **Proxy Password** from Webshare Proxy Settings. |
 
 Visit `https://YOUR-DOMAIN/healthz`. You are ready when it says `"status":"ok"`. Railway supplies the domain and port automatically; GitHub is the default OAuth provider on Railway.
 
-### 4. Connect your AI app
+### 5. Connect your AI app
 
 Your MCP URL is **`https://YOUR-DOMAIN/mcp`**. Use that URL, then sign in with an allowlisted GitHub account.
 
@@ -84,8 +96,11 @@ Copy this into your coding agent if you want it to guide you through Railway. Ke
 Help me set up https://github.com/scandolo/youtube-transcript-mcp on Railway.
 Read the current README first. Start with the Deploy on Railway button:
 https://railway.com/deploy/youtube-transcript-mcp
-Walk me through the shortest path: deploy, copy my Railway domain, create a GitHub OAuth app with
-the exact callback URL, add the five required Railway variables, verify
+Explain why the remote setup needs a rotating residential proxy and GitHub sign-in,
+and that the local setup needs neither. Walk me through the shortest path:
+deploy, copy my Railway domain, choose a Webshare Rotating Residential plan,
+find its Proxy Username and Proxy Password, create a GitHub OAuth app with
+the exact callback URL, add the five Railway variables, verify
 /healthz says ok, and connect /mcp to my AI app. Ask me which AI app I use.
 I will enter secrets directly in Railway; do not ask me to paste them here.
 Pause before any paid signup or purchase.
@@ -112,7 +127,7 @@ The server tries `youtube-transcript-api`, then `yt-dlp`. An optional Groq Whisp
 
 ## Run locally
 
-For a quick local setup, you need Python 3.10+ and Claude Code. Local stdio does not require Railway, GitHub OAuth, or a proxy.
+For a quick local setup, you need Python 3.10+ and Claude Code. Local stdio does not require Railway, GitHub OAuth, or a proxy. Start with your normal internet connection; add a proxy only if YouTube blocks it. This local command connects to Claude Code on your computer. Claude's web connector and ChatGPT connect to remote MCP servers, so use the Railway path for those clients.
 
 ```bash
 git clone https://github.com/scandolo/youtube-transcript-mcp.git
@@ -131,7 +146,7 @@ For another local MCP client, run `.venv/bin/youtube-transcript-mcp` as a stdio 
 | `/healthz` says `setup_required` | Add the variables it lists in Railway. Generate a public domain if one is missing. `/mcp` stays unavailable until setup is complete. |
 | GitHub sign-in fails | The callback URL must exactly match `https://YOUR-DOMAIN/auth/callback`. `YTM_ALLOWED_USERS` needs GitHub usernames, not email addresses. |
 | You must reconnect after every deploy | Confirm the template's volume is attached at `/data`. The `health` tool should report `oauth_state_persisted: true`. |
-| `IpBlocked` or no transcript | Use a **rotating Residential** Webshare package and the plain username. A static residential or free “Proxy Server” package will not provide the needed rotation. Some videos have no captions. |
+| `IpBlocked` or no transcript | On Railway, confirm you bought **Rotating Residential**, copied credentials from Webshare Proxy Settings, and added both variables. A proxy cannot guarantee access to every video; some videos have no captions. Locally, try your normal connection first. |
 | Search or chapters are missing | Add `YOUTUBE_API_KEY` with YouTube Data API v3 enabled. YouTube search costs 100 quota units per request. |
 | A working video stops working | Redeploy to pick up newer YouTube extraction libraries; YouTube changes its site often. |
 

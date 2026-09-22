@@ -184,6 +184,9 @@ def _build_auth():
             client_id=os.environ["GITHUB_CLIENT_ID"],
             client_secret=os.environ["GITHUB_CLIENT_SECRET"],
             base_url=base_url,
+            # We only need the GitHub login for YTM_ALLOWED_USERS. FastMCP's
+            # default "user" scope also grants profile write access.
+            required_scopes=["read:user"],
             jwt_signing_key=signing_key,
         )
 
