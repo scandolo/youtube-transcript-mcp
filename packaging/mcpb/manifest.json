@@ -10,9 +10,16 @@
     "url": "https://github.com/scandolo"
   },
   "homepage": "https://github.com/scandolo/youtube-transcript-mcp",
-  "icon": "assets/icon.svg",
+  "icon": "assets/icon.png",
   "license": "MIT",
   "keywords": ["youtube", "transcripts", "captions", "search"],
+  "privacy_policies": ["https://policies.google.com/privacy"],
+  "tools": [
+    {"name": "search_youtube", "description": "Find YouTube videos"},
+    {"name": "youtube_video_info", "description": "Read video details and chapters"},
+    {"name": "youtube_transcript", "description": "Read or search captions with timestamps"},
+    {"name": "health", "description": "Check available backends and settings"}
+  ],
   "server": {
     "type": "uv",
     "entry_point": "server/main.py",

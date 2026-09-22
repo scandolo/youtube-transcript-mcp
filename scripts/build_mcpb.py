@@ -23,7 +23,7 @@ def main() -> None:
         "pyproject.toml": ROOT / "pyproject.toml",
         "README.md": ROOT / "README.md",
         "LICENSE": ROOT / "LICENSE",
-        "assets/icon.svg": ROOT / "assets/icon.svg",
+        "assets/icon.png": ROOT / "assets/icon.png",
     }
     files.update(
         (f"youtube_transcript_mcp/{path.name}", path)
