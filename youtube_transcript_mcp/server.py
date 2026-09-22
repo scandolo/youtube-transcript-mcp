@@ -46,6 +46,11 @@ def _allowed_identities() -> set[str]:
     return {u.strip().lower() for u in raw.split(",") if u.strip()}
 
 
+def _auth_provider_name() -> str:
+    default = "github" if os.environ.get("RAILWAY_SERVICE_ID") else "none"
+    return os.environ.get("YTM_AUTH_PROVIDER", default).strip().lower()
+
+
 def _missing_railway_settings() -> list[str]:
     """List setup steps still needed before a public MCP endpoint can start."""
     if not os.environ.get("RAILWAY_SERVICE_ID"):
@@ -58,7 +63,7 @@ def _missing_railway_settings() -> list[str]:
     ):
         missing.append("residential proxy (Webshare username and password, or YTM_PROXY)")
 
-    provider = os.environ.get("YTM_AUTH_PROVIDER", "none").strip().lower()
+    provider = _auth_provider_name()
     if provider not in ("github", "google"):
         missing.append("YTM_AUTH_PROVIDER=github or google")
     if not _base_url():
@@ -146,7 +151,7 @@ def _persist_oauth_state() -> None:
 
 def _build_auth():
     """Construct the OAuth provider named by YTM_AUTH_PROVIDER, or None."""
-    provider = os.environ.get("YTM_AUTH_PROVIDER", "none").strip().lower()
+    provider = _auth_provider_name()
     if provider in ("", "none"):
         if os.environ.get("RAILWAY_SERVICE_ID"):
             raise SystemExit(
@@ -460,7 +465,7 @@ async def healthz(request):
     return JSONResponse(
         {
             "status": "ok",
-            "auth_provider": os.environ.get("YTM_AUTH_PROVIDER", "none"),
+            "auth_provider": _auth_provider_name(),
             "base_url": _base_url(),
             "youtube_api_key_configured": bool(os.environ.get("YOUTUBE_API_KEY")),
             "github_client_id_configured": bool(os.environ.get("GITHUB_CLIENT_ID")),
@@ -474,7 +479,7 @@ def health() -> dict:
     import importlib.util
 
     return {
-        "auth_provider": os.environ.get("YTM_AUTH_PROVIDER", "none"),
+        "auth_provider": _auth_provider_name(),
         "allowlist_size": len(_allowed_identities()),
         "base_url": _base_url(),
         # Presence only — never the values. Enough to tell "variable never
