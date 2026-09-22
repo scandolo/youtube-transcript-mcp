@@ -11,10 +11,9 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-
+COPY pyproject.toml README.md ./
 COPY youtube_transcript_mcp ./youtube_transcript_mcp
+RUN pip install --no-cache-dir .
 
 ENV YTM_TRANSPORT=http \
     YTM_HOST=0.0.0.0 \

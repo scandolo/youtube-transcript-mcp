@@ -46,6 +46,22 @@ def _allowed_identities() -> set[str]:
     return {u.strip().lower() for u in raw.split(",") if u.strip()}
 
 
+def _validate_deployment() -> None:
+    """Fail early when a Railway deploy cannot fetch captions."""
+    if not os.environ.get("RAILWAY_SERVICE_ID"):
+        return
+    if os.environ.get("YTM_PROXY"):
+        return
+    if not (
+        os.environ.get("WEBSHARE_PROXY_USERNAME")
+        and os.environ.get("WEBSHARE_PROXY_PASSWORD")
+    ):
+        raise SystemExit(
+            "Railway needs a residential proxy for YouTube captions. Set both "
+            "WEBSHARE_PROXY_USERNAME and WEBSHARE_PROXY_PASSWORD, or set YTM_PROXY."
+        )
+
+
 class AllowlistMiddleware(Middleware):
     """Refuse tool calls from anyone outside YTM_ALLOWED_USERS."""
 
@@ -98,6 +114,13 @@ def _persist_oauth_state() -> None:
         home = os.path.join(volume, "fastmcp")
         os.makedirs(home, exist_ok=True)
         os.environ["FASTMCP_HOME"] = home
+        # FastMCP creates its settings object when imported above, before this
+        # function runs. Update the live object as well as the environment.
+        from pathlib import Path
+
+        from fastmcp import settings
+
+        settings.home = Path(home)
         log.info("OAuth state persisted to %s", home)
     elif os.environ.get("RAILWAY_SERVICE_ID"):
         log.warning(
@@ -111,6 +134,11 @@ def _build_auth():
     """Construct the OAuth provider named by YTM_AUTH_PROVIDER, or None."""
     provider = os.environ.get("YTM_AUTH_PROVIDER", "none").strip().lower()
     if provider in ("", "none"):
+        if os.environ.get("RAILWAY_SERVICE_ID"):
+            raise SystemExit(
+                "Railway deployment requires OAuth. Set YTM_AUTH_PROVIDER=github (or google), "
+                "YTM_ALLOWED_USERS, and the provider's client ID and secret."
+            )
         return None
 
     base_url = _base_url()
@@ -130,6 +158,9 @@ def _build_auth():
     if provider == "github":
         from fastmcp.server.auth.providers.github import GitHubProvider
 
+        if not os.environ.get("GITHUB_CLIENT_ID") or not os.environ.get("GITHUB_CLIENT_SECRET"):
+            raise SystemExit("GitHub auth requires GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.")
+
         return GitHubProvider(
             client_id=os.environ["GITHUB_CLIENT_ID"],
             client_secret=os.environ["GITHUB_CLIENT_SECRET"],
@@ -139,6 +170,9 @@ def _build_auth():
 
     if provider == "google":
         from fastmcp.server.auth.providers.google import GoogleProvider
+
+        if not os.environ.get("GOOGLE_CLIENT_ID") or not os.environ.get("GOOGLE_CLIENT_SECRET"):
+            raise SystemExit("Google auth requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.")
 
         return GoogleProvider(
             client_id=os.environ["GOOGLE_CLIENT_ID"],
@@ -150,6 +184,7 @@ def _build_auth():
     raise SystemExit(f"Unknown YTM_AUTH_PROVIDER: {provider!r} (use github, google or none)")
 
 
+_validate_deployment()
 _auth = _build_auth()
 
 mcp = FastMCP(name="youtube-transcript", auth=_auth)
