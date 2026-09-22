@@ -85,7 +85,8 @@ def test_railway_volume_is_used_by_fastmcp(tmp_path):
         [
             sys.executable,
             "-c",
-            "import fastmcp; import youtube_transcript_mcp.server; print(fastmcp.settings.home)",
+            "import fastmcp; import youtube_transcript_mcp.server as server; "
+            "print(fastmcp.settings.home); print(server._auth.required_scopes)",
         ],
         env=env,
         capture_output=True,
@@ -93,7 +94,7 @@ def test_railway_volume_is_used_by_fastmcp(tmp_path):
         timeout=15,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(tmp_path / "fastmcp")
+    assert result.stdout.splitlines() == [str(tmp_path / "fastmcp"), "['read:user']"]
     assert list((tmp_path / "fastmcp" / "oauth-proxy").iterdir())
 
 
