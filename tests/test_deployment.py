@@ -6,7 +6,11 @@ import sys
 
 from starlette.testclient import TestClient
 
-from youtube_transcript_mcp.server import _missing_railway_settings, _setup_app
+from youtube_transcript_mcp.server import (
+    _missing_railway_settings,
+    _persist_oauth_state,
+    _setup_app,
+)
 
 
 def _clean_env() -> dict[str, str]:
@@ -89,3 +93,12 @@ def test_railway_volume_is_used_by_fastmcp(tmp_path):
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == str(tmp_path / "fastmcp")
     assert list((tmp_path / "fastmcp" / "oauth-proxy").iterdir())
+
+
+def test_explicit_fastmcp_home_after_import(monkeypatch, tmp_path):
+    from fastmcp import settings
+
+    monkeypatch.setattr(settings, "home", tmp_path / "old")
+    monkeypatch.setenv("FASTMCP_HOME", str(tmp_path / "new"))
+    _persist_oauth_state()
+    assert settings.home == tmp_path / "new"
