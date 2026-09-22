@@ -10,7 +10,7 @@
   [Claude Code](#claude-code) · [Claude Cowork](#claude-cowork) · [Give setup to your agent](#give-setup-to-your-agent) · [What it does](#what-it-does)
 </div>
 
-Turn YouTube captions into readable paragraphs with chapters, timestamps, and links to the exact moment in the video. Run it **on your own computer** with Claude Code or Claude Cowork. No Railway account, residential proxy, GitHub OAuth app, or YouTube API key is needed to start.
+Turn YouTube captions into readable paragraphs with chapters, timestamps, and links to the exact moment in the video. Run it **on your own computer** with Claude Code or Claude Cowork. No Railway account, residential proxy, GitHub OAuth app, or YouTube API key is needed to start. YouTube sees your normal internet connection, and the MCP server has no public URL to protect with sign-in.
 
 ## Contents
 
