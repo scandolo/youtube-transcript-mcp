@@ -1,5 +1,0 @@
-fastmcp>=2.11
-yt-dlp>=2026.7.4
-youtube-transcript-api>=1.0
-httpx>=0.27
-python-dotenv>=1.0

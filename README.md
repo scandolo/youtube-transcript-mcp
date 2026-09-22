@@ -1,219 +1,73 @@
-# youtube-transcript-mcp
+# YouTube Transcript MCP
 
-A private MCP server that turns a YouTube link into a transcript an agent can
-actually work with — reachable from Claude Code anywhere, and from Claude on
-mobile.
+Give Claude or ChatGPT a YouTube link and ask questions about the video. This MCP server fetches captions, merges them into readable paragraphs, and gives the model chapters, timestamps, and links back to exact moments. It can search YouTube too.
 
-Built for one use case: watching a lot of educational YouTube and then
-discussing it with Claude, where Claude needs to genuinely know what's in the
-video.
+**Example:** “Summarize the main argument in this video, then show me the timestamp for each claim: `https://www.youtube.com/watch?v=kCc8FmEb1nY`”
 
-## What makes the output good
+## Get it working on Railway
 
-Raw YouTube captions are bad input for a model. Measured on Karpathy's
-*Let's build GPT* (1h56m):
+You need a [Railway account](https://railway.com/), a [GitHub account](https://github.com/), and a **rotating residential** [Webshare](https://dashboard.webshare.io/) proxy. Railway hosting and the residential proxy can cost money. YouTube commonly blocks caption requests from cloud IPs, so a deploy without a residential proxy will not fetch transcripts.
 
-| | Raw captions | This server |
-|---|---|---|
-| Units to read | 2,955 fragments | 187 blocks |
-| Avg words per unit | 7.1 | 112.4 |
-| Fragments split mid-sentence | constant | merged |
-| Chapter structure | none | 30 chapters, with deep links |
-| Answering one question | ~28k tokens | ~1–3k tokens |
+> **Template status:** The deploy button will go here after the Railway template is published. Until then, use [Deploy from GitHub](https://railway.com/new) and select this repository. Railway detects the Dockerfile automatically; set `/healthz` as the service healthcheck in Settings.
 
-Concretely:
+1. **Deploy and get a domain.** In Railway, create a project from `scandolo/youtube-transcript-mcp`. On the service, choose **Settings → Networking → Generate Domain**. Copy the `https://…up.railway.app` URL. Attach a volume mounted at `/data` so OAuth connections survive redeploys.
+2. **Create a GitHub OAuth app.** Open [GitHub Developer settings](https://github.com/settings/developers) → **New OAuth App**. Use any app name. Set Homepage URL to your Railway URL and Authorization callback URL to `https://YOUR-DOMAIN/auth/callback` (replace `YOUR-DOMAIN` with the actual Railway hostname). Copy the client ID and generate a client secret.
+3. **Set Railway variables.** In the service’s **Variables** tab, add the values below and deploy. Use your own GitHub username for the allowlist. Get the proxy credentials from Webshare’s **Residential** proxy settings; enter the plain username, without `-rotate`.
 
-- **Fragments are merged into paragraphs** aligned to the video's own chapters.
-  16× fewer units to read, and no more mid-sentence breaks.
-- **Every block carries a timestamp and a deep link** (`youtu.be/ID?t=1234`), so
-  Claude can cite the exact moment back to you instead of paraphrasing vaguely.
-- **You rarely need the whole transcript.** Fetch one chapter by number or
-  title, or search for a term and get just the matching passages with context.
-- **Search is punctuation-insensitive.** Auto-captions never hyphenate
-  ("self attention") but chapter titles do ("self-attention"). Searching the
-  term you saw in the chapter list has to work, so both sides are normalised.
-  Phrase match first, then falls back to any-term.
+   | Name | Value |
+   |---|---|
+   | `YTM_AUTH_PROVIDER` | `github` |
+   | `YTM_ALLOWED_USERS` | Your GitHub username, for example `scandolo` |
+   | `GITHUB_CLIENT_ID` | OAuth app client ID |
+   | `GITHUB_CLIENT_SECRET` | OAuth app client secret |
+   | `WEBSHARE_PROXY_USERNAME` | Residential proxy username |
+   | `WEBSHARE_PROXY_PASSWORD` | Residential proxy password |
+   | `JWT_SIGNING_KEY` | A random secret, for example the output of `openssl rand -hex 32` |
 
-## Tools
+   The server reads Railway’s `RAILWAY_PUBLIC_DOMAIN` and `PORT` automatically. No `YTM_BASE_URL` or port setting is needed. Railway may show a failed initial deployment before these variables are set; redeploy after saving them.
 
-### `search_youtube(query, ...)`
-YouTube's own search, not a web search that happens to return videos. The
-distinction is the point: a web index ranks on links and coverage, so it hands
-back the famous videos, while YouTube ranks within its own catalogue on watch
-behaviour, freshness and channel authority. This is what you would have found by
-typing into the search box.
+4. **Connect your AI app.** The MCP URL is `https://YOUR-DOMAIN/mcp`. Sign in with the allowlisted GitHub account when prompted.
 
-| Arg | Purpose |
+   - **Claude:** **Customize → Connectors → + → Add custom connector**, then paste the MCP URL. Enable it in a conversation under **+ → Connectors**. On Team or Enterprise, an owner adds it in organization settings first. [Claude’s guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
+   - **ChatGPT:** On a supported plan, enable developer mode, then **Settings → Apps → Create** and enter the MCP URL. Choose OAuth, scan tools, and create the app. Availability varies by plan and workspace. [OpenAI’s guide](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt)
+   - **Claude Code:** `claude mcp add --transport http --scope user youtube-transcript https://YOUR-DOMAIN/mcp`, then run `/mcp` in Claude Code to sign in.
+
+Ask: **“Use the YouTube Transcript connector to summarize this video and cite the moments that support each point: [URL].”** For a long video, ask for its chapter list first, then a particular chapter.
+
+## Run locally
+
+Local stdio needs Python 3.10+ and no Railway, OAuth app, or proxy. YouTube may still block your network or a particular video may have no captions.
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e .
+claude mcp add youtube-transcript --scope user -- "$PWD/.venv/bin/youtube-transcript-mcp"
+```
+
+No `.env` file is needed for this path. For other local clients, run `.venv/bin/youtube-transcript-mcp` as a stdio MCP server. Copy `.env.example` if you want to configure optional backends or run HTTP yourself.
+
+## What the tools do
+
+| Tool | Use it for |
 |---|---|
-| `limit` | 1–50, default 10 |
-| `order` | `relevance` (default), `date`, `viewCount`, `rating`, `title` |
-| `duration` | `any` (default), `short` <4min, `medium` 4–20min, `long` >20min |
-| `published_after` | `YYYY-MM-DD` |
-| `channel_id` | Restrict to one channel (a `UC…` id, not a handle) |
+| `search_youtube` | Find videos using YouTube’s search ranking. A [YouTube Data API key](https://console.cloud.google.com/apis/library/youtube.googleapis.com) enables filters and reliable cloud search; without it, `yt-dlp` searches through the proxy. |
+| `youtube_video_info` | Get title, duration, description, and chapters before pulling a long transcript. |
+| `youtube_transcript` | Get the whole transcript, one chapter (`chapter="5"`), matching passages (`query="attention"`), or a time window. Use `language="it"` for another caption language. |
+| `health` | Check which optional backends and deployment settings are present, without exposing secrets. |
 
-Every result carries a `url`, so hand one straight to the tools below. Served by
-the Data API, which costs **100 quota units per search** against the 10,000/day
-free allowance — roughly **100 searches a day**. Past that it falls back to
-yt-dlp, which has no quota but ignores the filters and says so in `warnings`.
+Captions come from `youtube-transcript-api` first, then `yt-dlp`. If both find no captions and `GROQ_API_KEY` is set, Groq Whisper can transcribe downloaded audio. This fallback may incur Groq charges and has an upload size limit. `YOUTUBE_API_KEY` adds reliable metadata and search from cloud hosts; YouTube charges search requests at 100 quota units each against its daily quota.
 
-### `youtube_video_info(url)`
-Cheap orientation, no transcript. Title, channel, duration, chapter list with
-deep links, description, available caption languages. Call this first for a long
-video, then pull only the part you need.
+## Troubleshooting
 
-### `youtube_transcript(url, ...)`
-| Arg | Purpose |
-|---|---|
-| `format` | `chapters` (headed sections, default), `timestamped`, `plain` |
-| `chapter` | `"5"` or `"attention"` — one section by number or title |
-| `query` | Only passages mentioning these words, plus context |
-| `start` / `end` | Explicit time window in seconds |
-| `language` | Caption language code; most videos offer 100+ auto-translations |
-| `max_chars` | Response cap (default 40k chars ≈ 10k tokens) |
+- **Railway deploy fails:** Check required variables, domain, and volume. The server refuses to start on Railway without OAuth or a proxy. Visit `https://YOUR-DOMAIN/healthz` after it is live.
+- **OAuth callback error:** The GitHub OAuth callback must exactly match `https://YOUR-DOMAIN/auth/callback`. `YTM_ALLOWED_USERS` contains GitHub *usernames*, not email addresses.
+- **Reauthorize after every deploy:** Attach a Railway volume at `/data`. The `health` tool should report `oauth_state_persisted: true`.
+- **`IpBlocked` or no transcript:** Confirm your Webshare package says **Residential**, and use the plain proxy username. The free “Proxy Server” and static residential products do not provide the required rotation. Some videos have disabled or unavailable captions.
+- **Search or chapters missing:** Set `YOUTUBE_API_KEY` with YouTube Data API v3 enabled. Restrict the key to that API. If using a website restriction, allow your Railway URL as a referrer.
+- **It suddenly stopped working:** Redeploy to pick up a newer `yt-dlp` and `youtube-transcript-api` release. YouTube changes its site regularly.
 
-Truncated responses say so and carry `resume_at_seconds` to continue from.
+See [all configuration options](.env.example).
 
-### `health()`
-Config and backend availability. No secrets. Useful for debugging a deploy.
+## License
 
-## Backends
-
-Three, tried in order, degrading rather than failing:
-
-1. **`youtube-transcript-api`** — one request to the caption endpoint. Fastest.
-2. **`yt-dlp`** — heavier, but carries chapters and full metadata.
-3. **Groq Whisper** — only for videos with captions disabled. Needs `GROQ_API_KEY`
-   and ffmpeg; never runs unless the first two come back empty.
-
-Measured note: on a video with captions, backends 1 and 2 return *byte-identical*
-text. They're redundancy for uptime, not a quality tradeoff. Backend 2 does add
-chapters and metadata, which backend 1 has no concept of.
-
-## Auth
-
-OAuth proves *someone* authenticated; the allowlist is what makes it *you*.
-
-**The identity you allowlist depends on the provider:**
-
-| Provider | `YTM_ALLOWED_USERS` contains | Example |
-|---|---|---|
-| `github` | GitHub **usernames** | `scandolo` |
-| `google` | **email addresses** | `you@gmail.com` |
-
-So if you want to allow specific *emails*, use Google. GitHub identifies you by
-username — GitHub's API only exposes an email if you've made it public, so
-username is the reliable claim.
-
-Enforcement is in middleware, not per-tool, so a tool added later can't ship
-unprotected. It fails closed: no resolvable identity means no tool call. The
-server refuses to start if auth is on and the allowlist is empty.
-
-## Where to run it
-
-**Measured, not theorised:** deployed to Railway, the very first transcript
-request returned `IpBlocked` in 6 seconds. YouTube blocks by ASN, not by request
-rate, so low personal volume does not help — the block is on the network.
-Every backend failed identically, because they all share the one exit IP.
-
-**A cloud deploy therefore needs a residential proxy.** Set
-`WEBSHARE_PROXY_USERNAME` / `WEBSHARE_PROXY_PASSWORD` from a Webshare
-**"Residential"** package — not "Proxy Server" (that is the free datacenter
-tier, blocked exactly like the host is) and not "Static Residential".
-
-*Rotating* is the operative word, and it is a configuration detail with teeth:
-Webshare hands out per-session usernames like `user-1`, each pinned to one
-residential IP, and one flagged IP then fails every request. The rotating form
-is `user-rotate`, which draws a fresh IP per request. This server appends that
-suffix for you and retries a blocked request onto a new IP, so supply the plain
-username. Measured: `user-1` was blocked outright; `user-rotate` was not.
-
-Budget a few £/month. The alternative is running somewhere that already has a
-residential IP (a machine at home, published via a tunnel).
-
-Not a serverless workload, either. FastMCP's streamable HTTP initialises its
-session manager in the ASGI lifespan and holds MCP sessions in memory between
-requests. Vercel's Python builder also ignores `api/` when a `pyproject.toml` is
-present, and never produced a function at all. Use a persistent container.
-
-## Deploying on Railway
-
-The `Dockerfile` and `railway.json` are ready; Railway builds from the
-Dockerfile and healthchecks `/healthz`.
-
-`RAILWAY_PUBLIC_DOMAIN` is injected by the platform, so **`YTM_BASE_URL`
-configures itself** — OAuth discovery advertises the right domain with no
-manual step. `PORT` is honoured automatically too.
-
-| Variable | When | Value |
-|---|---|---|
-| `WEBSHARE_PROXY_USERNAME` / `WEBSHARE_PROXY_PASSWORD` | **required in the cloud** | from Webshare's proxy settings, plain username |
-| `YTM_PROXY` | instead of the pair above | `http://user:pass@host:port` |
-| `YTM_AUTH_PROVIDER` | for remote access | `github` or `google` |
-| `YTM_ALLOWED_USERS` | with auth | GitHub username, or email for Google |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | with GitHub auth | from the OAuth app |
-| `JWT_SIGNING_KEY` | with auth | `openssl rand -hex 32` |
-| `GROQ_API_KEY` | optional | enables the Whisper fallback |
-
-The GitHub OAuth app's callback URL must be exactly
-`https://<your-railway-domain>/auth/callback`.
-
-### Mount a volume, or you will reauthorize on every deploy
-
-FastMCP stores registered OAuth clients on disk. Railway rebuilds the container
-filesystem on every deploy — and again whenever the app wakes from sleep — so
-without a volume those registrations vanish, the connector's `client_id` stops
-being recognised, and the client is told to authorize again after every ship.
-
-Attach a volume to the service (any mount path, e.g. `/data`). Railway then
-injects `RAILWAY_VOLUME_MOUNT_PATH` and the server stores OAuth state there
-automatically. `health` reports `oauth_state_persisted`; if that is `false`,
-sessions will not survive the next deploy.
-
-## Setup
-
-```bash
-uv venv --python 3.12
-uv pip install -e .
-cp .env.example .env
-```
-
-### Local (Claude Code on this machine)
-
-Defaults are stdio, no auth:
-
-```bash
-claude mcp add youtube-transcript --scope user -- \
-  ~/code/youtube-transcript-mcp/.venv/bin/youtube-transcript-mcp
-```
-
-### Remote with OAuth
-
-Claude Code accepts a static bearer header, but claude.ai custom connectors do
-OAuth discovery and give you no field for one — so mobile needs real OAuth.
-
-1. GitHub OAuth app at <https://github.com/settings/developers>. Callback URL
-   must be exactly `${YTM_BASE_URL}/auth/callback`.
-2. In `.env`:
-   ```
-   YTM_TRANSPORT=http
-   YTM_AUTH_PROVIDER=github
-   YTM_BASE_URL=https://your-hostname
-   YTM_ALLOWED_USERS=your-github-username
-   GITHUB_CLIENT_ID=...
-   GITHUB_CLIENT_SECRET=...
-   JWT_SIGNING_KEY=$(openssl rand -hex 32)
-   ```
-3. claude.ai → Settings → Connectors → Add custom connector.
-
-`JWT_SIGNING_KEY` signs issued sessions. Setting it keeps them independent of
-the OAuth client secret, so rotating that secret doesn't sign everyone out. It
-is not what carries sessions across a deploy — a mounted volume is.
-
-## Maintenance
-
-`yt-dlp` is in a permanent arms race with YouTube; most "it suddenly stopped
-working" reports are a stale copy.
-
-```bash
-uv pip install -U yt-dlp youtube-transcript-api
-```
+MIT. See [LICENSE](LICENSE).
