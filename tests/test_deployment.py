@@ -44,10 +44,12 @@ def test_railway_setup_status(monkeypatch):
         assert client.get("/tools").status_code == 404
 
 
-def test_railway_requires_oauth():
+def test_railway_defaults_to_github_auth():
     result = _start({"RAILWAY_SERVICE_ID": "test", "YTM_PROXY": "http://proxy.example:80"})
     assert result.returncode == 0
     assert "Railway setup incomplete" in result.stderr
+    assert "GITHUB_CLIENT_ID" in result.stderr
+    assert "YTM_AUTH_PROVIDER" not in result.stderr
 
 
 def test_railway_requires_oauth_credentials():
