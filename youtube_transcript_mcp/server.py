@@ -117,7 +117,14 @@ def _persist_oauth_state() -> None:
     outlive a deploy; without a volume there is nowhere durable to put it, so
     say that plainly rather than failing mysteriously later.
     """
-    if os.environ.get("FASTMCP_HOME"):
+    from pathlib import Path
+
+    from fastmcp import settings
+
+    if explicit_home := os.environ.get("FASTMCP_HOME"):
+        # .env is loaded after FastMCP imports, so its settings object may
+        # already have captured the old default path.
+        settings.home = Path(explicit_home)
         return
 
     volume = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH")
@@ -127,10 +134,6 @@ def _persist_oauth_state() -> None:
         os.environ["FASTMCP_HOME"] = home
         # FastMCP creates its settings object when imported above, before this
         # function runs. Update the live object as well as the environment.
-        from pathlib import Path
-
-        from fastmcp import settings
-
         settings.home = Path(home)
         log.info("OAuth state persisted to %s", home)
     elif os.environ.get("RAILWAY_SERVICE_ID"):
