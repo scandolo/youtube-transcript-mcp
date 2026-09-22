@@ -1,0 +1,35 @@
+{
+  "manifest_version": "0.4",
+  "name": "youtube-transcript-mcp",
+  "display_name": "YouTube Transcript",
+  "version": "0.1.0",
+  "description": "Read and search YouTube transcripts with timestamped links",
+  "long_description": "Give Claude a YouTube URL to read its captions, explore chapters, or find a specific passage. Runs locally on your computer; no proxy, API key, or account with a hosting provider is required.",
+  "author": {
+    "name": "Federico Scandolara",
+    "url": "https://github.com/scandolo"
+  },
+  "homepage": "https://github.com/scandolo/youtube-transcript-mcp",
+  "icon": "assets/icon.png",
+  "license": "MIT",
+  "keywords": ["youtube", "transcripts", "captions", "search"],
+  "privacy_policies": ["https://policies.google.com/privacy"],
+  "tools": [
+    {"name": "search_youtube", "description": "Find YouTube videos"},
+    {"name": "youtube_video_info", "description": "Read video details and chapters"},
+    {"name": "youtube_transcript", "description": "Read or search captions with timestamps"},
+    {"name": "health", "description": "Check available backends and settings"}
+  ],
+  "server": {
+    "type": "uv",
+    "entry_point": "server/main.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "server/main.py"]
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {"python": ">=3.10 <4"}
+  }
+}
