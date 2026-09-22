@@ -7,7 +7,7 @@
 
   [![Checks](https://github.com/scandolo/youtube-transcript-mcp/actions/workflows/checks.yml/badge.svg)](https://github.com/scandolo/youtube-transcript-mcp/actions/workflows/checks.yml) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](pyproject.toml) [![MCP](https://img.shields.io/badge/protocol-MCP-8B8DFB.svg)](https://modelcontextprotocol.io/)
 
-  **[Set up on Railway →](https://railway.com/new)**
+  <a href="https://railway.com/deploy/youtube-transcript-mcp"><img src="https://railway.com/button.svg" alt="Deploy on Railway" /></a>
 
   [Get started](#get-started) · [Give setup to your agent](#give-setup-to-your-agent) · [Run locally](#run-locally) · [What it does](#what-it-does)
 </div>
@@ -34,7 +34,7 @@ You need a [Railway account](https://railway.com/), a [GitHub account](https://g
 
 ### 1. Deploy
 
-Open **Set up on Railway** above, choose **Deploy from GitHub repo**, and select `scandolo/youtube-transcript-mcp`. Railway finds the Dockerfile automatically. In the service's **Settings**, set the health check path to `/healthz`, generate a public domain under **Networking**, and attach a volume mounted at `/data` to keep OAuth connections across deploys. Copy your `https://…up.railway.app` URL.
+Click **Deploy on Railway** above, choose your Railway workspace, and click **Deploy**. The template uses this GitHub repo and sets up the public domain, `/healthz` health check, and persistent `/data` volume for you. Open the new service in Railway and copy its `https://…up.railway.app` URL from **Settings → Networking**.
 
 The first deployment is intentionally in setup mode: `/healthz` tells you which settings remain, and `/mcp` does not serve tools until setup is complete.
 
@@ -82,8 +82,9 @@ Copy this into your coding agent if you want it to guide you through Railway. Ke
 
 ```text
 Help me set up https://github.com/scandolo/youtube-transcript-mcp on Railway.
-Read the current README first. Walk me through the
-shortest path: deploy, copy my Railway domain, create a GitHub OAuth app with
+Read the current README first. Start with the Deploy on Railway button:
+https://railway.com/deploy/youtube-transcript-mcp
+Walk me through the shortest path: deploy, copy my Railway domain, create a GitHub OAuth app with
 the exact callback URL, add the five required Railway variables, verify
 /healthz says ok, and connect /mcp to my AI app. Ask me which AI app I use.
 I will enter secrets directly in Railway; do not ask me to paste them here.
