@@ -12,6 +12,12 @@
 
 Turn YouTube captions into readable paragraphs with chapters, timestamps, and links to the exact moment in the video. Run it **on your own computer** with Claude Code or Claude Cowork. No Railway account, residential proxy, GitHub OAuth app, or YouTube API key is needed to start. YouTube sees your normal internet connection, and the MCP server has no public URL to protect with sign-in.
 
+<p align="center">
+  <a href="https://github.com/scandolo/youtube-transcript-mcp/releases/latest/download/youtube-transcript-mcp.mcpb"><img src="https://img.shields.io/badge/Download%20for%20Claude%20Desktop-.mcpb-8B8DFB?style=for-the-badge" alt="Download the Claude Desktop extension" /></a>
+</p>
+
+<p align="center">One file to download, then open it in Claude Desktop. <a href="#claude-cowork">Cowork instructions</a> · <a href="#claude-code">Claude Code instructions</a></p>
+
 ## Contents
 
 - [Claude Code](#claude-code)
@@ -42,8 +48,8 @@ The `--scope user` flag makes the tool available across your projects. The first
 
 Use **Cowork in the Claude Desktop app**. Local MCP servers are available there through desktop extensions; Cowork on the web cannot run an MCP server on your laptop. [Anthropic's Cowork guide](https://support.claude.com/en/articles/15520349-use-claude-cowork-on-web-desktop-and-mobile) describes this desktop requirement.
 
-1. Download [YouTube Transcript.mcpb](https://github.com/scandolo/youtube-transcript-mcp/releases/latest/download/youtube-transcript-mcp.mcpb) from the latest release.
-2. In [Claude Desktop](https://claude.com/download), open **Settings → Extensions → Advanced settings → Install Extension…** and select the downloaded file. Claude installs its Python dependencies automatically. [Anthropic's extension guide](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) shows the same flow.
+1. Click the **Download for Claude Desktop** button above to get `youtube-transcript-mcp.mcpb`.
+2. Open the file in [Claude Desktop](https://claude.com/download). If it does not open automatically, use **Settings → Extensions → Advanced settings → Install Extension…** and select the file. Claude installs its Python dependencies automatically. [Anthropic's extension guide](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) shows the Settings flow.
 3. Open **Cowork** in the desktop app and ask about a YouTube video. If Claude asks to enable or allow the tool, approve it.
 
 Keep Claude Desktop open while using the local connector. If your organization disables local MCP servers or desktop extensions, ask your admin to enable them.
@@ -70,6 +76,12 @@ Paste a video URL into Claude and ask:
 > Use the YouTube Transcript tools to summarize this video. Link the exact moment that supports each point: `https://www.youtube.com/watch?v=kCc8FmEb1nY`
 
 For a long video, ask for its chapters first, then ask about one chapter. To find a passage, ask: “Where does this video discuss attention? Give me the timestamp and link.”
+
+<p align="center">
+  <img src="assets/demo.gif" alt="Illustrated demo: Claude checks video details, searches the transcript, and answers with a timestamp" width="900" />
+</p>
+
+Illustrated example with the server's real tool names and [a moment from the sample video](https://www.youtube.com/watch?v=kCc8FmEb1nY&t=98s).
 
 ## What it does
 
