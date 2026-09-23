@@ -78,7 +78,7 @@ Paste a video URL into Claude and ask:
 For a long video, ask for its chapters first, then ask about one chapter. To find a passage, ask: “Where does this video discuss attention? Give me the timestamp and link.”
 
 <p align="center">
-  <img src="assets/demo.gif" alt="Illustrated demo: Claude checks video details, searches the transcript, and answers with a timestamp" width="900" />
+  <img src="assets/demo.gif" alt="Illustrated Claude chat with a user prompt, thinking status, YouTube Transcript tool calls, and a timestamped answer" width="900" />
 </p>
 
 Illustrated example with the server's real tool names and [a moment from the sample video](https://www.youtube.com/watch?v=kCc8FmEb1nY&t=98s). [View the still image](assets/demo.png).
