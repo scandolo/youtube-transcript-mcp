@@ -21,6 +21,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 
 from .env import base_url as _base_url
+from .env import redis_url as _redis_url
 from .formatting import build_response, timecode
 from .metadata import (
     QuotaExceeded,
@@ -149,13 +150,39 @@ def _persist_oauth_state() -> None:
         )
 
 
+def _redis_storage(signing_key: str | None):
+    """OAuth state in Redis, encrypted the way FastMCP encrypts its disk store.
+
+    Serverless hosts have no disk that outlives a request, and consecutive
+    steps of one OAuth flow can land on different instances, so the state has
+    to live outside the process. None means fall back to FastMCP's disk store.
+    """
+    url = _redis_url()
+    if not url:
+        return None
+    if not signing_key:
+        raise SystemExit("Redis-backed OAuth state needs JWT_SIGNING_KEY to encrypt it.")
+
+    from cryptography.fernet import Fernet
+    from fastmcp.server.auth.jwt_issuer import derive_jwt_key
+    from key_value.aio.stores.redis import RedisStore
+    from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
+
+    key = derive_jwt_key(high_entropy_material=signing_key, salt="fastmcp-storage-encryption-key")
+    return FernetEncryptionWrapper(
+        key_value=RedisStore(url=url),
+        fernet=Fernet(key=key),
+        raise_on_decryption_error=False,
+    )
+
+
 def _build_auth():
     """Construct the OAuth provider named by YTM_AUTH_PROVIDER, or None."""
     provider = _auth_provider_name()
     if provider in ("", "none"):
-        if os.environ.get("RAILWAY_SERVICE_ID"):
+        if os.environ.get("RAILWAY_SERVICE_ID") or os.environ.get("VERCEL"):
             raise SystemExit(
-                "Railway deployment requires OAuth. Set YTM_AUTH_PROVIDER=github (or google), "
+                "A hosted deployment requires OAuth. Set YTM_AUTH_PROVIDER=github (or google), "
                 "YTM_ALLOWED_USERS, and the provider's client ID and secret."
             )
         return None
@@ -167,12 +194,13 @@ def _build_auth():
             "(on Railway this is derived from RAILWAY_PUBLIC_DOMAIN automatically)."
         )
 
-    _persist_oauth_state()
-
     # Left unset, FastMCP derives the token key from the upstream client secret,
     # which ties every issued session to that secret: rotating it silently signs
     # everyone out. An explicit key decouples the two.
     signing_key = os.environ.get("JWT_SIGNING_KEY") or None
+    storage = _redis_storage(signing_key)
+    if storage is None:
+        _persist_oauth_state()
 
     if provider == "github":
         from fastmcp.server.auth.providers.github import GitHubProvider
@@ -188,6 +216,7 @@ def _build_auth():
             # default "user" scope also grants profile write access.
             required_scopes=["read:user"],
             jwt_signing_key=signing_key,
+            client_storage=storage,
         )
 
     if provider == "google":
@@ -201,6 +230,7 @@ def _build_auth():
             client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
             base_url=base_url,
             jwt_signing_key=signing_key,
+            client_storage=storage,
         )
 
     raise SystemExit(f"Unknown YTM_AUTH_PROVIDER: {provider!r} (use github, google or none)")
@@ -497,6 +527,7 @@ def health() -> dict:
             "WEBSHARE_PROXY_PASSWORD": bool(os.environ.get("WEBSHARE_PROXY_PASSWORD")),
             "GROQ_API_KEY": bool(os.environ.get("GROQ_API_KEY")),
             "RAILWAY_PUBLIC_DOMAIN": bool(os.environ.get("RAILWAY_PUBLIC_DOMAIN")),
+            "REDIS_URL": bool(_redis_url()),
         },
         "backends_importable": {
             name: importlib.util.find_spec(name) is not None
@@ -504,7 +535,7 @@ def health() -> dict:
         },
         # False means OAuth registrations sit on an ephemeral disk, so the next
         # deploy or sleep will force the connector to reauthorize.
-        "oauth_state_persisted": bool(os.environ.get("FASTMCP_HOME")),
+        "oauth_state_persisted": bool(os.environ.get("FASTMCP_HOME") or _redis_url()),
     }
 
 

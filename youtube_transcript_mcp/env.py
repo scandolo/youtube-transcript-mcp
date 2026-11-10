@@ -8,14 +8,22 @@ import os
 def base_url() -> str | None:
     """Public URL of this server.
 
-    Railway injects RAILWAY_PUBLIC_DOMAIN, so the OAuth base URL configures
-    itself on that platform and only needs setting by hand elsewhere.
+    Railway injects RAILWAY_PUBLIC_DOMAIN and Vercel VERCEL_PROJECT_PRODUCTION_URL,
+    so the OAuth base URL configures itself there and only needs setting by hand
+    elsewhere.
     """
     if explicit := os.environ.get("YTM_BASE_URL"):
         return explicit.rstrip("/")
     if domain := os.environ.get("RAILWAY_PUBLIC_DOMAIN"):
         return f"https://{domain}"
+    if domain := os.environ.get("VERCEL_PROJECT_PRODUCTION_URL"):
+        return f"https://{domain}"
     return None
+
+
+def redis_url() -> str | None:
+    """Redis for OAuth state on hosts with no durable disk (Vercel)."""
+    return os.environ.get("REDIS_URL") or os.environ.get("KV_URL")
 
 
 def api_referer() -> str | None:
