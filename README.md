@@ -7,21 +7,21 @@
 
   [![Checks](https://github.com/scandolo/youtube-transcript-mcp/actions/workflows/checks.yml/badge.svg)](https://github.com/scandolo/youtube-transcript-mcp/actions/workflows/checks.yml) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](pyproject.toml) [![MCP](https://img.shields.io/badge/protocol-MCP-8B8DFB.svg)](https://modelcontextprotocol.io/)
 
-  [Claude Code](#claude-code) · [Claude Cowork](#claude-cowork) · [Give setup to your agent](#give-setup-to-your-agent) · [What it does](#what-it-does)
+  [Claude Desktop](#claude-desktop-and-cowork) · [Claude Code](#claude-code) · [Remote (optional)](#remote-hosting-optional) · [What it does](#what-it-does)
 </div>
 
-Turn YouTube captions into readable paragraphs with chapters, timestamps, and links to the exact moment in the video. Run it **on your own computer** with Claude Code or Claude Cowork. No Railway account, residential proxy, GitHub OAuth app, or YouTube API key is needed to start. YouTube sees your normal internet connection, and the MCP server has no public URL to protect with sign-in.
+Turn YouTube captions into readable paragraphs with chapters, timestamps, and links to the exact moment in the video. It runs **on your own computer**: download one file, open it in Claude Desktop, done. No account, proxy, or API key needed, because YouTube sees your normal home connection.
 
 <p align="center">
   <a href="https://github.com/scandolo/youtube-transcript-mcp/releases/latest/download/youtube-transcript-mcp.mcpb"><img src="https://img.shields.io/badge/Download%20for%20Claude%20Desktop-.mcpb-8B8DFB?style=for-the-badge" alt="Download the Claude Desktop extension" /></a>
 </p>
 
-<p align="center">One file to download, then open it in Claude Desktop. <a href="#claude-cowork">Cowork instructions</a> · <a href="#claude-code">Claude Code instructions</a></p>
+Want it on your phone or in Claude on the web too? You can [host it remotely](#remote-hosting-optional), but that needs a paid residential proxy.
 
 ## Contents
 
+- [Claude Desktop and Cowork](#claude-desktop-and-cowork)
 - [Claude Code](#claude-code)
-- [Claude Cowork](#claude-cowork)
 - [Give setup to your agent](#give-setup-to-your-agent)
 - [Try it](#try-it)
 - [What it does](#what-it-does)
@@ -30,6 +30,16 @@ Turn YouTube captions into readable paragraphs with chapters, timestamps, and li
 - [Troubleshooting](#troubleshooting)
 - [Configuration and security](#configuration-and-security)
 - [License](#license)
+
+## Claude Desktop and Cowork
+
+Works in regular Claude Desktop chats and in **Cowork in the desktop app**. Cowork on the web cannot run an MCP server on your laptop. [Anthropic's Cowork guide](https://support.claude.com/en/articles/15520349-use-claude-cowork-on-web-desktop-and-mobile) describes this desktop requirement.
+
+1. Click the **Download for Claude Desktop** button above to get `youtube-transcript-mcp.mcpb`.
+2. Open the file in [Claude Desktop](https://claude.com/download). If it does not open automatically, use **Settings → Extensions → Advanced settings → Install Extension…** and select the file. Claude installs its Python dependencies automatically. [Anthropic's extension guide](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) shows the Settings flow.
+3. Start a chat (or a Cowork task) and ask about a YouTube video. If Claude asks to enable or allow the tool, approve it.
+
+Keep Claude Desktop open while using the local connector. If your organization disables local MCP servers or desktop extensions, ask your admin to enable them.
 
 ## Claude Code
 
@@ -44,28 +54,18 @@ Turn YouTube captions into readable paragraphs with chapters, timestamps, and li
 
 The `--scope user` flag makes the tool available across your projects. The first launch downloads the package; later launches use uv's cache. To remove it, run `claude mcp remove --scope user youtube-transcript`.
 
-## Claude Cowork
-
-Use **Cowork in the Claude Desktop app**. Local MCP servers are available there through desktop extensions; Cowork on the web cannot run an MCP server on your laptop. [Anthropic's Cowork guide](https://support.claude.com/en/articles/15520349-use-claude-cowork-on-web-desktop-and-mobile) describes this desktop requirement.
-
-1. Click the **Download for Claude Desktop** button above to get `youtube-transcript-mcp.mcpb`.
-2. Open the file in [Claude Desktop](https://claude.com/download). If it does not open automatically, use **Settings → Extensions → Advanced settings → Install Extension…** and select the file. Claude installs its Python dependencies automatically. [Anthropic's extension guide](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) shows the Settings flow.
-3. Open **Cowork** in the desktop app and ask about a YouTube video. If Claude asks to enable or allow the tool, approve it.
-
-Keep Claude Desktop open while using the local connector. If your organization disables local MCP servers or desktop extensions, ask your admin to enable them.
-
 ## Give setup to your agent
 
 Copy this into Claude Code or another coding agent if you prefer guided setup:
 
 ```text
 Help me set up https://github.com/scandolo/youtube-transcript-mcp locally.
-Read its current README first. Ask whether I use Claude Code or Claude Cowork
-in Claude Desktop, then follow the matching short path. For Claude Code,
+Read its current README first. Ask whether I use Claude Desktop (or Cowork) or Claude Code
+and follow the matching short path. For Claude Code,
 install uv if needed and add the server with `claude mcp add --scope user`.
-For Cowork, download the latest .mcpb release and walk me through installing
+For Claude Desktop, download the latest .mcpb release and walk me through installing
 it in Claude Desktop Settings > Extensions. Verify the tools are connected,
-then have me try a YouTube URL. Do not set up Railway, a proxy, an OAuth app,
+then have me try a YouTube URL. Do not set up remote hosting, a proxy, an OAuth app,
 or API keys unless I ask for remote hosting or a specific optional feature.
 ```
 
@@ -106,15 +106,20 @@ For development, clone the repo and run `uv sync`, then `uv run youtube-transcri
 
 ## Remote hosting (optional)
 
-If you need a connector for Claude on the web or ChatGPT, you can [deploy on Railway](https://railway.com/deploy/youtube-transcript-mcp). See the [remote setup guide](docs/remote-setup.md) before deploying: hosting usually needs a **paid rotating residential proxy** and the public endpoint needs a GitHub OAuth app. Local setup avoids both. A proxy improves reliability but cannot guarantee every video works.
+Only needed if you want the tools in Claude on your phone, on the web, or in ChatGPT. You can deploy the server to [Vercel](https://vercel.com) (the free Hobby plan is enough), but two things make it harder than the local setup:
+
+- **A residential proxy is required.** YouTube blocks caption requests from cloud IPs, so the server has to send them through home connections. [Webshare](https://www.webshare.io/pricing)'s **Rotating Residential** plan works; their free datacenter proxies do not.
+- **Sign-in protects the public URL.** A GitHub OAuth app and an allowlist of usernames keep strangers from using your tools and your proxy bandwidth.
+
+The [remote setup guide](docs/remote-setup.md) walks through it in about 15 minutes. A proxy improves reliability but cannot guarantee every video works.
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
 | Claude Code cannot find `uvx` | Install [uv](https://docs.astral.sh/uv/getting-started/installation/), open a new terminal, and rerun the command. `command -v uvx` should print a path. |
-| Cowork cannot see the tools | Use Cowork in the **desktop app**, check that the extension is enabled in **Settings → Extensions**, and start a new Cowork task. A web custom connector cannot reach this local server. |
-| `IpBlocked` or no transcript | Your own IP may still be blocked by YouTube, or the video may have no captions. Try another captioned video first. See [remote setup](docs/remote-setup.md) if you need a proxy. |
+| Claude Desktop cannot see the tools | Use the **desktop app** (not the web), check that the extension is enabled in **Settings → Extensions**, and start a new chat or Cowork task. A web custom connector cannot reach this local server. |
+| `IpBlocked` or no transcript | Your own IP may still be blocked by YouTube, or the video may have no captions. Try another captioned video first. If you host it remotely, see the [remote setup guide](docs/remote-setup.md). |
 | Search or chapters are missing | Add `YOUTUBE_API_KEY` with YouTube Data API v3 enabled. Search costs 100 quota units per request. |
 | A working video stops working | Update the package or extension to pick up newer YouTube extraction libraries; YouTube changes its site often. |
 

@@ -1,74 +1,78 @@
-# Remote setup on Railway
+# Remote setup on Vercel
 
 [← Back to local setup](../README.md)
 
-Use this only when you need a public MCP URL for Claude on the web or ChatGPT. For Claude Code or Cowork in Claude Desktop, the [local setup](../README.md) is shorter and usually more reliable. Railway hosting and a rotating residential proxy can cost money.
+Use this only when you want a public MCP URL, for Claude on your phone or the web, or for ChatGPT. For Claude Desktop, Cowork or Claude Code, the [local setup](../README.md) is shorter and more reliable.
 
-Railway's server sends requests from a cloud IP, which [YouTube often blocks for captions](https://github.com/jdepoix/youtube-transcript-api#working-around-ip-bans-requestblocked-or-ipblocked-exception). A **residential proxy** sends those requests through ordinary home internet IPs instead. GitHub sign-in protects your public MCP URL and your proxy bandwidth; it is unrelated to reading YouTube. This Railway template currently requires both for a working remote deployment. A proxy improves reliability but cannot guarantee every video will work.
+Two things are needed that the local setup avoids:
 
-### 1. Deploy
+- **A rotating residential proxy (paid).** Vercel sends requests from cloud IPs, which [YouTube blocks for captions](https://github.com/jdepoix/youtube-transcript-api#working-around-ip-bans-requestblocked-or-ipblocked-exception). A residential proxy sends them through ordinary home connections instead.
+- **A GitHub OAuth app.** It protects your public URL: only the GitHub usernames you allowlist can call the tools and spend your proxy bandwidth. It only asks GitHub for read access to your profile.
 
-Click **[Deploy on Railway](https://railway.com/deploy/youtube-transcript-mcp)**, choose your Railway workspace, and click **Deploy**. The template uses this GitHub repo and sets up the public domain, `/healthz` health check, and persistent `/data` volume for you. Open the new service in Railway and copy its `https://…up.railway.app` URL from **Settings → Networking**.
+Vercel's free Hobby plan and Upstash's free Redis plan are enough for personal use.
 
-The first deployment is intentionally in setup mode: `/healthz` tells you which settings remain, and `/mcp` does not serve tools until setup is complete.
+### 1. Create the Vercel project
 
-### 2. Get a residential proxy
+1. Fork this repo, then in Vercel choose **Add New → Project** and import your fork. No build settings are needed: Vercel runs the ASGI app in [`app.py`](../app.py).
+2. Deploy once. The first deployment fails to start until step 5; that is expected. Note your production URL, for example `https://your-project.vercel.app`.
 
-1. Create a [Webshare account](https://dashboard.webshare.io/) and choose a **Rotating Residential** plan in **Plans & Pricing**. This is a paid plan; Webshare's free **Proxy Server** and **Static Residential** products are different. See [Webshare's plan comparison](https://www.webshare.io/pricing).
-2. Open [Webshare Proxy Settings](https://dashboard.webshare.io/proxy/settings). Copy **Proxy Username** and **Proxy Password**. You do not need to configure an endpoint or choose a country; the server uses Webshare's rotating residential endpoint automatically. A username ending in `-rotate` is fine.
-3. Keep those credentials for step 4. Enter them only in Railway Variables, never in an AI chat or GitHub file.
+### 2. Add Redis
 
-If you already use another rotating residential provider, set its full proxy URL in `YTM_PROXY` instead of the two Webshare variables. See [.env.example](../.env.example).
+In the project, open **Storage → Create Database → Upstash for Redis**, pick the **Free** plan and connect it to the project. Vercel sets `REDIS_URL` for you. The server keeps its sign-in state there, encrypted, because serverless functions have no disk that lasts between requests.
 
-### 3. Create a GitHub OAuth app
+### 3. Get a residential proxy
 
-**Why?** Railway gives your server a public URL. The GitHub sign-in checks your username against `YTM_ALLOWED_USERS` so strangers cannot call your tools or spend your proxy bandwidth. This project only asks GitHub for **read access to your profile** to identify your username; it does not request repository access. Local stdio runs on your computer and skips this step. [GitHub's OAuth app guide](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) explains the registration screen.
+1. Create a [Webshare account](https://dashboard.webshare.io/) and buy a **Rotating Residential** plan. Webshare's free **Proxy Server** and **Static Residential** products do not work for this. See [Webshare's plans](https://www.webshare.io/pricing).
+2. Open [Webshare Proxy Settings](https://dashboard.webshare.io/proxy/settings) and copy **Proxy Username** and **Proxy Password**. A username ending in `-rotate` is fine.
 
-Open [GitHub Developer settings → OAuth Apps](https://github.com/settings/developers) and choose **New OAuth App**. Use any name. Set **Homepage URL** to your Railway URL and **Authorization callback URL** to:
+Using another provider? Put its full proxy URL in `YTM_PROXY` instead. See [.env.example](../.env.example).
+
+### 4. Create a GitHub OAuth app
+
+Open [GitHub Developer settings → OAuth Apps → New OAuth App](https://github.com/settings/developers). Use any name, set **Homepage URL** to your Vercel URL and **Authorization callback URL** to:
 
 ```text
-https://YOUR-DOMAIN/auth/callback
+https://YOUR-PROJECT.vercel.app/auth/callback
 ```
 
-Replace `YOUR-DOMAIN` with your actual Railway hostname, without `https://` inside that placeholder. Copy the **Client ID** and generate a **Client secret**.
+Copy the **Client ID** and generate a **Client secret**.
 
-### 4. Add five Railway variables
+### 5. Add the environment variables
 
-In your Railway service, open **Variables** and add these values. Railway redeploys after you save them.
+In **Settings → Environment Variables**, add these for Production, then redeploy:
 
-| Variable | What to enter |
+| Variable | Value |
 |---|---|
-| `YTM_ALLOWED_USERS` | Your GitHub username, for example `scandolo`. Separate multiple usernames with commas. |
-| `GITHUB_CLIENT_ID` | The OAuth app's client ID. |
-| `GITHUB_CLIENT_SECRET` | The OAuth app's client secret. |
-| `WEBSHARE_PROXY_USERNAME` | **Proxy Username** from Webshare Proxy Settings; a trailing `-rotate` is okay. |
-| `WEBSHARE_PROXY_PASSWORD` | **Proxy Password** from Webshare Proxy Settings. |
+| `YTM_AUTH_PROVIDER` | `github` |
+| `YTM_ALLOWED_USERS` | Your GitHub username. Separate several with commas. |
+| `GITHUB_CLIENT_ID` | The OAuth app's client ID |
+| `GITHUB_CLIENT_SECRET` | The OAuth app's client secret |
+| `JWT_SIGNING_KEY` | A random value: run `openssl rand -hex 32` |
+| `WEBSHARE_PROXY_USERNAME` | Webshare **Proxy Username** |
+| `WEBSHARE_PROXY_PASSWORD` | Webshare **Proxy Password** |
 
-Visit `https://YOUR-DOMAIN/healthz`. You are ready when it says `"status":"ok"`. Railway supplies the domain and port automatically; GitHub is the default OAuth provider on Railway.
+Optional: `YOUTUBE_API_KEY` for faster metadata and filtered search. If you restrict the key to websites in Google Cloud, allow your Vercel URL.
 
-### 5. Connect your AI app
+Visit `https://YOUR-PROJECT.vercel.app/healthz`. You are ready when it says `"status":"ok"`.
 
-Your MCP URL is **`https://YOUR-DOMAIN/mcp`**. Use that URL, then sign in with an allowlisted GitHub account.
+### 6. Connect your AI app
 
-| Client | Where to paste the MCP URL |
+Your MCP URL is **`https://YOUR-PROJECT.vercel.app/mcp`**. Add it, then sign in with an allowlisted GitHub account.
+
+| Client | Where to add the MCP URL |
 |---|---|
-| **Claude** | **Customize → Connectors → + → Add custom connector**, then enable it in a chat with **+ → Connectors**. On Team or Enterprise, an owner adds it in organization settings. [Claude instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp). |
-| **ChatGPT** | On a supported plan, enable developer mode; in **Settings → Apps → Create**, enter the MCP URL, choose OAuth, scan tools, and create the app. Availability varies by plan and workspace. [ChatGPT instructions](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt). |
-| **Claude Code** | Run the command below, then use `/mcp` in Claude Code to sign in. |
-
-```bash
-claude mcp add --transport http --scope user youtube-transcript https://YOUR-DOMAIN/mcp
-```
+| **Claude** (web and mobile) | **Customize → Connectors → + → Add custom connector**. Connectors added on the web also appear in the mobile apps. [Claude instructions](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp). |
+| **ChatGPT** | On a supported plan, enable developer mode; in **Settings → Apps → Create**, enter the MCP URL and choose OAuth. [ChatGPT instructions](https://help.openai.com/en/articles/12584461-developer-mode-and-mcp-apps-in-chatgpt). |
+| **Claude Code** | `claude mcp add --transport http --scope user youtube-transcript https://YOUR-PROJECT.vercel.app/mcp`, then `/mcp` to sign in. |
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| `/healthz` says `setup_required` | Add the variables it lists in Railway. Generate a public domain if one is missing. `/mcp` stays unavailable until setup is complete. |
-| GitHub sign-in fails | The callback URL must exactly match `https://YOUR-DOMAIN/auth/callback`. `YTM_ALLOWED_USERS` needs GitHub usernames, not email addresses. |
-| You must reconnect after every deploy | Confirm the template's volume is attached at `/data`. The `health` tool should report `oauth_state_persisted: true`. |
-| `IpBlocked` or no transcript | Confirm you bought **Rotating Residential**, copied credentials from Webshare Proxy Settings, and added both variables. Some videos have no captions. |
+| Every request returns 500 | Open the deployment's runtime logs. Usually a missing variable from step 5, or Redis not connected (no `REDIS_URL`). |
+| GitHub sign-in fails | The callback URL must exactly match `https://YOUR-PROJECT.vercel.app/auth/callback`. `YTM_ALLOWED_USERS` takes GitHub usernames, not emails. |
+| "Not authorized: … is not on the allowlist" | You signed in with a different GitHub account. Sign out of GitHub in that browser, or add the username. |
+| `IpBlocked` or no transcript | Confirm the plan is **Rotating Residential** and both Webshare variables are set. Some videos have no captions. |
+| Search ignores filters | Add `YOUTUBE_API_KEY`; without it search falls back to yt-dlp. If the key is website-restricted, allow your Vercel URL. |
 
-## Advanced settings
-
-See [.env.example](../.env.example) for other options. You can choose Google OAuth, use another residential proxy through `YTM_PROXY`, add `YOUTUBE_API_KEY` for metadata and search, or set `GROQ_API_KEY` for audio transcription. Set `JWT_SIGNING_KEY` to a stable random value if you want existing sessions to survive a GitHub client secret rotation.
+Videos with captions disabled need the Whisper fallback (`GROQ_API_KEY`), which also needs ffmpeg and so does not run on Vercel. Use the local setup for those.
