@@ -1,11 +1,11 @@
 <div align="center">
   <img src="assets/hero.svg" alt="YouTube video to searchable transcript to AI assistant" width="100%" />
 
-  # YouTube Transcript MCP
+  # YouTube MCP
 
   **Ask your AI about a YouTube video. Get an answer you can click back to.**
 
-  [![Checks](https://github.com/scandolo/youtube-transcript-mcp/actions/workflows/checks.yml/badge.svg)](https://github.com/scandolo/youtube-transcript-mcp/actions/workflows/checks.yml) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](pyproject.toml) [![MCP](https://img.shields.io/badge/protocol-MCP-8B8DFB.svg)](https://modelcontextprotocol.io/)
+  [![Checks](https://github.com/scandolo/youtube-mcp/actions/workflows/checks.yml/badge.svg)](https://github.com/scandolo/youtube-mcp/actions/workflows/checks.yml) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](pyproject.toml) [![MCP](https://img.shields.io/badge/protocol-MCP-8B8DFB.svg)](https://modelcontextprotocol.io/)
 
   [Claude Desktop](#claude-desktop-and-cowork) · [Claude Code](#claude-code) · [Remote (optional)](#remote-hosting-optional) · [What it does](#what-it-does)
 </div>
@@ -13,7 +13,7 @@
 Turn YouTube captions into readable paragraphs with chapters, timestamps, and links to the exact moment in the video. It runs **on your own computer**: download one file, open it in Claude Desktop, done. No account, proxy, or API key needed, because YouTube sees your normal home connection.
 
 <p align="center">
-  <a href="https://github.com/scandolo/youtube-transcript-mcp/releases/latest/download/youtube-transcript-mcp.mcpb"><img src="https://img.shields.io/badge/Download%20for%20Claude%20Desktop-.mcpb-8B8DFB?style=for-the-badge" alt="Download the Claude Desktop extension" /></a>
+  <a href="https://github.com/scandolo/youtube-mcp/releases/latest/download/youtube-transcript-mcp.mcpb"><img src="https://img.shields.io/badge/Download%20for%20Claude%20Desktop-.mcpb-8B8DFB?style=for-the-badge" alt="Download the Claude Desktop extension" /></a>
 </p>
 
 Want it on your phone or in Claude on the web too? You can [host it remotely](#remote-hosting-optional), but that needs a paid residential proxy.
@@ -47,7 +47,7 @@ Keep Claude Desktop open while using the local connector. If your organization d
 2. Copy and run this command in your terminal:
 
    ```bash
-   claude mcp add --scope user youtube-transcript -- "$(command -v uvx)" --from git+https://github.com/scandolo/youtube-transcript-mcp youtube-transcript-mcp
+   claude mcp add --scope user youtube-transcript -- "$(command -v uvx)" --from git+https://github.com/scandolo/youtube-mcp youtube-transcript-mcp
    ```
 
 3. Open Claude Code (or start a new session) and ask it to use the **YouTube Transcript** tools on a video URL. Run `/mcp` if you want to check the connection.
@@ -59,7 +59,7 @@ The `--scope user` flag makes the tool available across your projects. The first
 Copy this into Claude Code or another coding agent if you prefer guided setup:
 
 ```text
-Help me set up https://github.com/scandolo/youtube-transcript-mcp locally.
+Help me set up https://github.com/scandolo/youtube-mcp locally.
 Read its current README first. Ask whether I use Claude Desktop (or Cowork) or Claude Code
 and follow the matching short path. For Claude Code,
 install uv if needed and add the server with `claude mcp add --scope user`.
@@ -99,7 +99,7 @@ The server tries `youtube-transcript-api`, then `yt-dlp`. An optional Groq Whisp
 The server speaks MCP over **stdio** by default. If your app supports local stdio MCP servers, set its command to `uvx` and its arguments to:
 
 ```text
---from git+https://github.com/scandolo/youtube-transcript-mcp youtube-transcript-mcp
+--from git+https://github.com/scandolo/youtube-mcp youtube-transcript-mcp
 ```
 
 For development, clone the repo and run `uv sync`, then `uv run youtube-transcript-mcp`. No `.env` file is needed.
